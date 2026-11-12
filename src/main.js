@@ -476,24 +476,34 @@ view.addEventListener('pointermove', (e) => {
   if (!gesture) return;
   const pts = [...pointers.values()];
   const f = focal();
+  // 動きは「水平（方角）」「垂直（上下の角度）」「拡大・縮小」のどれか一つに固定する。
+  // 最初の動きで決め、指を離すまで変えない（斜めには動かさない）。
+  const axisOf = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v');
   if (pts.length >= 2) {
-    // 2本指: 中点の移動で方角・角度、ピンチでズーム
     const [a, b] = pts;
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    state.fov = gesture.fov * gesture.dist / Math.max(dist, 1);
-    clampView();
-    const f2 = focal();
-    state.heading = gesture.heading - (mx - gesture.mx) / f2 / DEG;
-    state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + (my - gesture.my) / f2) / DEG;
-    gesture.moved = true;
+    const dx = mx - gesture.mx, dy = my - gesture.my;
+    if (!gesture.axis) {
+      const pinch = Math.abs(dist - gesture.dist), pan = Math.hypot(dx, dy);
+      if (pinch > 18 && pinch > pan * 0.8) gesture.axis = 'zoom';
+      else if (pan > 12) gesture.axis = axisOf(dx, dy);
+    }
+    if (gesture.axis === 'zoom') {
+      state.fov = gesture.fov * gesture.dist / Math.max(dist, 1);
+    } else if (gesture.axis === 'h') {
+      state.heading = gesture.heading - dx / f / DEG;
+    } else if (gesture.axis === 'v') {
+      state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + dy / f) / DEG;
+    }
+    if (gesture.axis) gesture.moved = true;
   } else if (pts.length === 1) {
     // 1本指（マウス）ドラッグでも視点移動
-    if (Math.hypot(p.x - p.x0, p.y - p.y0) > 8 || gesture.moved) {
-      gesture.moved = true;
-      state.heading = gesture.heading - (p.x - gesture.mx) / f / DEG;
-      state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + (p.y - gesture.my) / f) / DEG;
-    }
+    const dx = p.x - gesture.mx, dy = p.y - gesture.my;
+    if (!gesture.axis && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) gesture.axis = axisOf(dx, dy);
+    if (gesture.axis === 'h') state.heading = gesture.heading - dx / f / DEG;
+    else if (gesture.axis === 'v') state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + dy / f) / DEG;
+    if (gesture.axis) gesture.moved = true;
   }
   if (gesture.moved) {
     clampView();
@@ -524,7 +534,7 @@ function snapshotGesture() {
   const mx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
   const my = pts.reduce((s, p) => s + p.y, 0) / pts.length;
   const dist = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 1;
-  return { mx, my, dist, fov: state.fov, heading: state.heading, pitch: state.pitch, moved: false, count: pts.length };
+  return { mx, my, dist, fov: state.fov, heading: state.heading, pitch: state.pitch, moved: false, count: pts.length, axis: null };
 }
 view.addEventListener('wheel', (e) => {
   e.preventDefault();
