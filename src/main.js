@@ -345,7 +345,7 @@ function updateCompass() {
   const hd = ((Math.round(state.heading) % 360) + 360) % 360;
   $('compass-label').textContent = `${dirName(hd)} ${hd}°`;
   const total = state.obs ? Math.round(h0()) : 0;
-  $('height-label').innerHTML = `地上${eyeHeight()}m<br>標高${total}m`;
+  $('height-label').innerHTML = `<span class="h-ground">地上${eyeHeight()}m</span><span class="h-total">標高${total}m</span>`;
 }
 
 // ---------------- 操作（タップ・ドラッグ・2本指） ----------------
