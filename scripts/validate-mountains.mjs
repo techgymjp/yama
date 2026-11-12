@@ -33,20 +33,16 @@ async function elevAt(gx, gy) {
   const t = await tile(Math.floor(gx/256), Math.floor(gy/256));
   return t[(gy % 256) * 256 + (gx % 256)];
 }
-const out = [];
-let bad = 0;
-for (const [name, yomi, elev, lat, lon, cls] of raw) {
-  const cx = Math.floor(px(lon)), cy = Math.floor(py(lat));
-  const mpp = 40075016 * Math.cos(lat*Math.PI/180) / N;
-  // 半径内の局所最大点のうち「距離 + 標高差×30」が最小の点を山頂とみなす
-  const r = Math.ceil(R_SEARCH / mpp);
-  const grid = new Float32Array((2*r+1)**2);
+async function findSummit(cx, cy, mpp, elev, radius, w, maxDiff) {
+  const r = Math.ceil(radius / mpp);
+  const W = 2*r+1;
+  const grid = new Float32Array(W*W);
   for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++)
-    grid[(dy+r)*(2*r+1) + dx+r] = await elevAt(cx+dx, cy+dy);
-  const W = 2*r+1, w = 3;
-  let best = 1e18, bx = cx, by = cy;
+    grid[(dy+r)*W + dx+r] = await elevAt(cx+dx, cy+dy);
+  let best = 1e18, bx = cx, by = cy, found = false;
   for (let j = w; j < W-w; j++) for (let i = w; i < W-w; i++) {
     const e = grid[j*W+i];
+    if (Math.abs(e - elev) > maxDiff) continue;
     let isMax = true;
     for (let v = -w; v <= w && isMax; v++) for (let u = -w; u <= w; u++)
       if (grid[(j+v)*W+i+u] > e) { isMax = false; break; }
@@ -54,15 +50,30 @@ for (const [name, yomi, elev, lat, lon, cls] of raw) {
     const plat = latOf(cy+j-r+0.5), plon = lonOf(cx+i-r+0.5);
     if (out.some((o) => Math.hypot((o.lat-plat)*111000, (o.lon-plon)*111000*Math.cos(plat*Math.PI/180)) < 800)) continue;
     const cost = Math.hypot(i-r, j-r) * mpp + 30 * Math.abs(e - elev);
-    if (cost < best) { best = cost; bx = cx+i-r; by = cy+j-r; }
+    if (cost < best) { best = cost; bx = cx+i-r; by = cy+j-r; found = true; }
+  }
+  return { bx, by, found };
+}
+const out = [];
+let bad = 0;
+const dropped = [];
+for (const [name, yomi, elev, lat, lon, cls] of raw) {
+  const cx = Math.floor(px(lon)), cy = Math.floor(py(lat));
+  const mpp = 40075016 * Math.cos(lat*Math.PI/180) / N;
+  // 半径内の局所最大点のうち「距離 + 標高差×30」が最小の点を山頂とみなす
+  let { bx, by } = await findSummit(cx, cy, mpp, elev, R_SEARCH, 3, Infinity);
+  if (Math.abs(await elevAt(bx, by) - elev) > 80) {
+    // 手入力座標のずれが大きい場合: 15km 圏内で標高が一致する目立つピーク（半径約450m で最高点）を探す
+    const r2 = await findSummit(cx, cy, mpp, elev, 15000, Math.round(450 / mpp), 50);
+    if (r2.found) { bx = r2.bx; by = r2.by; }
   }
   const demE = await elevAt(bx, by);
   const shift = Math.hypot(bx-cx, by-cy) * mpp;
   const diff = demE - elev;
   const flag = Math.abs(diff) > 80 ? ' <<<' : '';
-  if (flag) bad++;
+  if (flag) { bad++; dropped.push(name); }
   console.log(`${name.padEnd(10,'　')} ${elev}m dem=${demE.toFixed(0)} diff=${diff.toFixed(0)} shift=${shift.toFixed(0)}m${flag}`);
-  out.push({ name, yomi, elev, lat: +latOf(by+0.5).toFixed(5), lon: +lonOf(bx+0.5).toFixed(5), hyakumeizan: cls === 100 });
+  if (!flag) out.push({ name, yomi, elev, lat: +latOf(by+0.5).toFixed(5), lon: +lonOf(bx+0.5).toFixed(5), cls, hyakumeizan: cls === 100 });
 }
 fs.writeFileSync('src/data/mountains.json', JSON.stringify(out, null, 0).replace(/\},\{/g, '},\n{') + '\n');
-console.log(`total ${out.length}, flagged ${bad}`);
+console.log(`total ${out.length}, dropped ${bad}: ${dropped.join(' ')}`);

@@ -8,6 +8,9 @@ const wrap180 = (a) => ((a % 360) + 540) % 360 - 180;
 const DIRS = ['北', '北北東', '北東', '東北東', '東', '東南東', '南東', '南南東', '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西'];
 const dirName = (az) => DIRS[Math.round(((az % 360) + 360) % 360 / 22.5) % 16];
 const fmtDist = (m) => (m < 10000 ? (m / 1000).toFixed(1) : Math.round(m / 1000)) + 'km';
+const CLASS_LABEL = { 100: '日本百名山', 200: '日本二百名山', 300: '日本三百名山' };
+const RANK = { 100: 3, 200: 2, 300: 1, 0: 0 };
+const rank = (p) => RANK[p.cls] || 0;
 const HEIGHTS = [1.6, 5, 10, 20, 30, 50, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000];
 
 // ---------------- 状態 ----------------
@@ -179,7 +182,7 @@ function drawLabels(list, color, big = false) {
   const items = list
     .map((p) => ({ p, ...project(p.az, p.tanAlt) }))
     .filter((o) => o.x > -50 && o.x < cssW + 50 && o.y > -20 && o.y < cssH + 20)
-    .sort((a, b) => (b.p.hyakumeizan - a.p.hyakumeizan) || (b.p.elev - a.p.elev));
+    .sort((a, b) => (rank(b.p) - rank(a.p)) || (b.p.elev - a.p.elev));
   octx.font = `${big ? 'bold 16px' : 'bold 12px'} system-ui, sans-serif`;
   octx.textAlign = 'center';
   for (const o of items) {
@@ -355,7 +358,7 @@ function nextQuest() {
     return;
   }
   // 百名山・富士山・目立つ山を出やすく
-  const weight = (p) => (p.name === '富士山' ? 6 : 1) * (p.hyakumeizan ? 3 : 1) * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
+  const weight = (p) => (p.name === '富士山' ? 6 : 1) * [1, 1.5, 2, 3][rank(p)] * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
   let r = Math.random() * list.reduce((s, p) => s + weight(p), 0);
   let pick = list[0];
   for (const p of list) { r -= weight(p); if (r <= 0) { pick = p; break; } }
@@ -364,7 +367,7 @@ function nextQuest() {
   g.recent = [pick.name, ...g.recent].slice(0, Math.min(8, Math.floor(cands.length / 2)));
   $('quest-name').textContent = pick.name;
   $('quest-suffix').textContent = 'を探して！';
-  $('quest-sub').textContent = `${pick.yomi}・標高${pick.elev}m${pick.hyakumeizan ? '・日本百名山' : ''}`;
+  $('quest-sub').textContent = `${pick.yomi}・標高${pick.elev}m${CLASS_LABEL[pick.cls] ? '・' + CLASS_LABEL[pick.cls] : ''}`;
   draw();
 }
 
@@ -463,7 +466,7 @@ async function readHeading() {
 }
 
 // ---------------- 開始・地点の読み込み ----------------
-async function startAt(lat, lon, { name = '', summit = false } = {}) {
+async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: 山頂の標高
   $('start').classList.add('hidden');
   $('picker').classList.add('hidden');
   $('loading').classList.remove('hidden');
@@ -472,10 +475,7 @@ async function startAt(lat, lon, { name = '', summit = false } = {}) {
   try {
     const r = await call({ type: 'load', lat, lon });
     let ground = r.ground;
-    if (summit) {
-      const pk = MOUNTAINS.find((m) => m.name === name);
-      if (pk) ground = Math.max(ground, pk.elev);
-    }
+    if (summit) ground = Math.max(ground, summit);
     state.obs = { lat, lon, ground, name };
     state.hIdx = 0;
     const h = await readHeading();
@@ -536,8 +536,8 @@ function openPicker() {
     const icon = L.divIcon({ className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#e76f51;border:3px solid #fff;box-shadow:0 1px 4px #0008"></div>', iconSize: [16, 16] });
     marker = L.marker([0, 0], { icon });
     for (const m of MOUNTAINS) {
-      L.circleMarker([m.lat, m.lon], { radius: m.hyakumeizan ? 4 : 3, color: '#2a6f97', weight: 1, fillOpacity: 0.8 })
-        .bindTooltip(`${m.name} ${m.elev}m`).on('click', () => pick(m.lat, m.lon, m.name, true)).addTo(map);
+      L.circleMarker([m.lat, m.lon], { radius: 2 + rank(m) * 0.7, color: ['#6c757d', '#52796f', '#2a6f97', '#c1121f'][rank(m)], weight: 1, fillOpacity: 0.8 })
+        .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => pick(m.lat, m.lon, m.name, m.elev)).addTo(map);
     }
     map.on('click', (e) => pick(e.latlng.lat, e.latlng.lng, '', false));
     if (state.obs) pick(state.obs.lat, state.obs.lon, state.obs.name, false);
@@ -570,7 +570,7 @@ $('search').addEventListener('change', (e) => {
   const m = MOUNTAINS.find((x) => x.name === e.target.value.trim() || x.yomi === e.target.value.trim());
   if (!m) return;
   map.setView([m.lat, m.lon], 12);
-  pick(m.lat, m.lon, m.name, true);
+  pick(m.lat, m.lon, m.name, m.elev);
   e.target.blur();
 });
 
