@@ -49,10 +49,26 @@
     <button id="btn-labels">山名</button>
     <button id="btn-place">地点</button>
     <button id="btn-bgm">♪ BGM</button>
-    <div id="score">正解 0</div>
+    <div id="score">1/10問・0点</div>
   </div>
 
   <div id="toast"></div>
+
+  <!-- 結果 -->
+  <div id="result" class="hidden">
+    <div class="result-box">
+      <div class="result-label">結果</div>
+      <div id="result-title">—</div>
+      <div id="result-score">0点</div>
+      <div id="result-detail"></div>
+      <ol id="result-list"></ol>
+      <div class="result-buttons">
+        <button id="btn-again" class="primary">もう一度（同じ場所）</button>
+        <button id="btn-result-place" class="secondary">場所を変える</button>
+        <button id="btn-result-view" class="secondary">景色を見る</button>
+      </div>
+    </div>
+  </div>
 
   <!-- スタート画面 -->
   <div id="start" class="panel">

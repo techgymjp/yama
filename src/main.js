@@ -34,6 +34,7 @@ function describe(p) {
   if (CLASS_LABEL[p.cls]) parts.push(CLASS_LABEL[p.cls]);
   return parts.join('・');
 }
+const TOTAL_QUESTIONS = 10;
 const HEIGHTS = [1.6, 5, 10, 20, 30, 50, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000];
 
 // ---------------- 状態 ----------------
@@ -43,7 +44,7 @@ const state = {
   heading: 0, pitch: 2, fov: 60,
   peaks: [],            // 見える/見えない判定付き
   showLabels: false,
-  game: { target: null, misses: 0, hinted: false, revealed: false, score: 0, asked: 0, recent: [] },
+  game: { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false },
   found: null,          // { peak, until }
   tapMark: null,
 };
@@ -278,22 +279,15 @@ function drawOverlay() {
   // パスで答えを表示
   if (g.revealed && g.target) drawLabels([g.target], '#ffd166', true);
 
-  // ヒント: 画面外なら方向を矢印で示す
+  // ヒント: 画面外なら「どちらへ何度回るか」をバッジで示す
   if (g.hinted && g.target && !g.revealed) {
     const pt = project(g.target.az, g.target.tanAlt);
-    if (pt.x < 0 || pt.x > cssW) {
-      const left = pt.x < 0;
-      const x = left ? 26 : cssW - 70, y = cssH * 0.45;
-      octx.fillStyle = 'rgba(255,209,102,0.95)';
-      octx.beginPath();
-      if (left) { octx.moveTo(x - 14, y); octx.lineTo(x + 6, y - 16); octx.lineTo(x + 6, y + 16); }
-      else { octx.moveTo(x + 14, y); octx.lineTo(x - 6, y - 16); octx.lineTo(x - 6, y + 16); }
-      octx.fill();
-    } else {
+    if (pt.x < 0 || pt.x > cssW) drawHintBadge(wrap180(g.target.az - state.heading));
+    else {
       // 画面内なら大まかな範囲を示す
-      octx.strokeStyle = 'rgba(255,209,102,0.8)';
+      octx.strokeStyle = 'rgba(255,209,102,0.85)';
       octx.setLineDash([6, 6]); octx.lineWidth = 2;
-      octx.strokeRect(pt.x - 60, 0, 120, cssH);
+      octx.strokeRect(pt.x - 60, 70, 120, cssH - 150);
       octx.setLineDash([]);
     }
   }
@@ -308,17 +302,49 @@ function drawOverlay() {
   }
 }
 
+// 画面の左右端（コンパスと高さボタンの間）に、回る向きと角度を示すバッジ
+function drawHintBadge(diff) {
+  const right = diff > 0;
+  const text = `${right ? '右' : '左'}へ ${Math.round(Math.abs(diff))}°`;
+  octx.font = 'bold 17px system-ui, sans-serif';
+  const tw = octx.measureText(text).width;
+  const w = tw + 52, h = 44, r = h / 2;
+  const top = Math.max(120, Math.min(cssH * 0.4, cssH - 260));
+  const x = right ? cssW - w - 12 : 12, y = top;
+  // 少し脈打つ
+  const pulse = 1 + 0.04 * Math.sin(performance.now() / 180);
+  octx.save();
+  octx.translate(x + w / 2, y + h / 2); octx.scale(pulse, pulse); octx.translate(-(x + w / 2), -(y + h / 2));
+  octx.shadowColor = 'rgba(0,0,0,0.45)'; octx.shadowBlur = 8;
+  octx.fillStyle = 'rgba(255,209,102,0.97)';
+  octx.beginPath();
+  octx.moveTo(x + r, y); octx.lineTo(x + w - r, y); octx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+  octx.lineTo(x + r, y + h); octx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); octx.fill();
+  octx.shadowBlur = 0;
+  // 矢印
+  octx.fillStyle = '#1d2b3a';
+  const ax = right ? x + w - 22 : x + 22, ay = y + h / 2, dir = right ? 1 : -1;
+  octx.beginPath();
+  octx.moveTo(ax + 9 * dir, ay); octx.lineTo(ax - 5 * dir, ay - 11); octx.lineTo(ax - 5 * dir, ay + 11); octx.fill();
+  octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  octx.fillText(text, right ? x + (w - 26) / 2 + 2 : x + 26 + (w - 26) / 2 - 2, ay + 1);
+  octx.restore();
+  octx.textBaseline = 'alphabetic';
+  // 脈打ちのアニメーション
+  if (!drawHintBadge.raf) drawHintBadge.raf = requestAnimationFrame(() => { drawHintBadge.raf = 0; draw(); });
+}
+
 function drawLabels(list, color, big = false) {
   const placed = [];
   const items = list
     .map((p) => ({ p, ...project(p.az, p.tanAlt) }))
     .filter((o) => o.x > -50 && o.x < cssW + 50 && o.y > -20 && o.y < cssH + 20)
     .sort((a, b) => (rank(b.p) - rank(a.p)) || (b.p.elev - a.p.elev));
-  octx.font = `${big ? 'bold 16px' : 'bold 12px'} system-ui, sans-serif`;
+  octx.font = `${big ? 'bold 19px' : 'bold 15px'} system-ui, sans-serif`;
   octx.textAlign = 'center';
   for (const o of items) {
     const label = big ? `${o.p.name}（${fmtDist(o.p.dist)}）` : o.p.name;
-    const w = octx.measureText(label).width + 8, hgt = big ? 20 : 16;
+    const w = octx.measureText(label).width + 10, hgt = big ? 25 : 20;
     let ly = null;
     for (let k = 0; k < 6; k++) {
       const yy = o.y - 26 - k * (hgt + 2);
@@ -334,7 +360,7 @@ function drawLabels(list, color, big = false) {
     octx.fillStyle = 'rgba(0,0,0,0.55)';
     octx.fillRect(o.x - w / 2, ly - hgt, w, hgt);
     octx.fillStyle = color;
-    octx.fillText(label, o.x, ly - (big ? 5 : 4));
+    octx.fillText(label, o.x, ly - (big ? 6 : 5));
   }
 }
 
@@ -462,7 +488,7 @@ async function refreshPeaks() {
   const old = state.game.target;
   state.peaks = r.peaks;
   if (old) state.game.target = state.peaks.find((p) => p.name === old.name && p.lat === old.lat) || old;
-  if (!state.game.target) nextQuest();
+  if (!state.game.target && !state.game.waiting && !state.game.finished) nextQuest();
   draw();
 }
 
@@ -494,8 +520,21 @@ function autoFrame() {
   state.pitch = Math.atan(lo + 0.1 * H / f) / DEG;
 }
 
+function resetGame() {
+  Object.assign(state.game, { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false });
+  $('result').classList.add('hidden');
+  updateScore();
+}
+function updateScore() {
+  const g = state.game;
+  $('score').textContent = `${Math.max(1, g.round)}/${TOTAL_QUESTIONS}問・${g.points}点`;
+}
+
 function nextQuest() {
   const g = state.game;
+  g.waiting = false;
+  if (g.finished) return;
+  if (g.round >= TOTAL_QUESTIONS) { showResult(); return; }
   const cands = state.peaks.filter((p) => p.visible && !p.here && p.dist > 800 && p.dist < 260000);
   const pool = cands.filter((p) => !g.recent.includes(p.name));
   const list = pool.length ? pool : cands;
@@ -513,10 +552,11 @@ function nextQuest() {
   let pick = list[0];
   for (const p of list) { r -= weight(p); if (r <= 0) { pick = p; break; } }
   g.target = pick;
-  g.asked++;
+  g.round++;
+  updateScore();
   g.recent = [pick.name, ...g.recent].slice(0, Math.min(8, Math.floor(cands.length / 2)));
   $('quest-name').textContent = pick.name;
-  $('quest-suffix').textContent = 'を探して！';
+  $('quest-suffix').textContent = `を探して！（第${g.round}問）`;
   $('quest-sub').textContent = describe(pick);
   draw();
 }
@@ -531,12 +571,15 @@ function onTap(x, y) {
   state.tapMark = { az, tanAlt, ok: hit, until: performance.now() + 1200 };
   if (hit) {
     const pts = Math.max(10, 100 - g.misses * 20 - (g.hinted ? 30 : 0));
-    g.score++;
-    $('score').textContent = `正解 ${g.score}`;
+    g.correct++;
+    g.points += pts;
+    g.history.push({ name: g.target.name, ok: true, pts });
+    updateScore();
     sfx('correct');
     toast(`正解！ ${g.target.name}（${fmtDist(g.target.dist)}先） +${pts}点`, 'good', 2500);
     state.found = { peak: g.target, until: performance.now() + 3000 };
     g.target = null;
+    g.waiting = true;
     setTimeout(nextQuest, 1600);
     setTimeout(draw, 3100);
   } else {
@@ -564,11 +607,39 @@ function showHint() {
   $('quest-sub').textContent = `ヒント: ${dirName(g.target.az)}の方角（${Math.round(g.target.az)}°）・${fmtDist(g.target.dist)}先`;
   draw();
 }
+// ---------------- 結果 ----------------
+function showResult() {
+  const g = state.game;
+  g.finished = true;
+  g.target = null;
+  const max = TOTAL_QUESTIONS * 100;
+  const rate = g.points / max;
+  const title = rate >= 0.9 ? '山の達人' : rate >= 0.7 ? '山の上級者' : rate >= 0.45 ? '山好き' : rate >= 0.2 ? 'ハイカー' : '山歩きビギナー';
+  $('result-title').textContent = title;
+  $('result-score').textContent = `${g.points}点`;
+  $('result-detail').textContent = `${TOTAL_QUESTIONS}問中 ${g.correct}問正解（${max}点満点）`;
+  $('result-list').innerHTML = g.history.map((h, i) =>
+    `<li><span>第${i + 1}問 ${h.name}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? `○ ${h.pts}点` : '× パス'}</span></li>`).join('');
+  $('result').classList.remove('hidden');
+  sfx(rate >= 0.45 ? 'result' : 'resultLow');
+  $('quest-name').textContent = '結果発表';
+  $('quest-suffix').textContent = '';
+  $('quest-sub').textContent = '';
+  draw();
+}
+$('btn-again').addEventListener('click', () => { sfx('start'); resetGame(); nextQuest(); });
+$('btn-result-place').addEventListener('click', () => { sfx('click'); $('result').classList.add('hidden'); openPicker(); });
+$('btn-result-view').addEventListener('click', () => { $('result').classList.add('hidden'); state.showLabels = true; $('btn-labels').classList.add('on'); draw(); });
+
 $('btn-hint').addEventListener('click', () => { sfx('click'); showHint(); });
 $('btn-skip').addEventListener('click', () => {
   const g = state.game;
-  if (!g.target || g.revealed) { nextQuest(); return; }
+  if (g.finished) { $('result').classList.remove('hidden'); return; }
+  if (g.waiting) return;
+  if (!g.target) { nextQuest(); return; }
   g.revealed = true;
+  g.waiting = true;
+  g.history.push({ name: g.target.name, ok: false, pts: 0 });
   sfx('reveal');
   toast(`正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`, '', 3000);
   animateTo(g.target.az, Math.atan(g.target.tanAlt) / DEG + 3);
@@ -658,8 +729,7 @@ async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: �
     $('loading-text').textContent = '見える山を計算中…';
     const pk = await call({ type: 'peaks', h0: h0() });
     state.peaks = pk.peaks;
-    state.game.target = null;
-    state.game.recent = [];
+    resetGame();
     autoFrame();
     if (bgmOn) audio.start();
     $('loading').classList.add('hidden');

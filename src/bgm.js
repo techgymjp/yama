@@ -254,6 +254,19 @@ export function createBgm(opts = {}) {
       tone('square', 220, t, 0.18, 0.12, { to: 200 });
       tone('square', 180, t + 0.2, 0.32, 0.12, { to: 140 });
     },
+    // 結果発表（よい成績）: アルプホルンのファンファーレ＋ヨーデルの決め＋カウベル連打
+    result(t) {
+      [['G3', 0, 0.3], ['B3', 0.25, 0.3], ['D4', 0.5, 0.3], ['G4', 0.75, 0.6], ['D4', 1.3, 0.25], ['G4', 1.55, 1.2]].forEach(([n, dt, d]) => horn(N(n), t + dt, d, 0.22));
+      ['G5', 'B5', 'D6'].forEach((n, i) => tone('triangle', mtof(N(n)), t + 1.55 + i * 0.09, 0.9, 0.16));
+      tone('sine', mtof(N('D5')), t + 2.0, 0.15, 0.2, { to: mtof(N('G5')) });
+      tone('sine', mtof(N('B5')), t + 2.15, 0.6, 0.2);
+      [0.75, 1.55, 1.8, 2.05].forEach((dt) => cowbellSfx(t + dt));
+    },
+    // 結果発表（もう一息）: やさしい下降と上昇
+    resultLow(t) {
+      [['D4', 0, 0.35], ['B3', 0.3, 0.35], ['G3', 0.6, 0.5], ['D4', 1.1, 0.3], ['G4', 1.4, 0.9]].forEach(([n, dt, d]) => horn(N(n), t + dt, d, 0.2));
+      cowbellSfx(t + 1.4);
+    },
     // ヒント・パスなどの軽い操作音
     click(t) { tone('sine', 880, t, 0.08, 0.15, { to: 660 }); },
     reveal(t) { ['G4', 'D4', 'B3'].forEach((n, i) => tone('triangle', mtof(N(n)), t + i * 0.12, 0.3, 0.2)); },
