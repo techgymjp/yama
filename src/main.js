@@ -824,7 +824,7 @@ async function readHeading() {
 }
 
 // ---------------- 開始・地点の読み込み ----------------
-async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: 山頂の標高
+async function startAt(lat, lon, { name = '', summit = 0, snapped = false } = {}) {  // summit: 山頂の標高
   $('start').classList.add('hidden');
   $('picker').classList.add('hidden');
   $('loading').classList.remove('hidden');
@@ -855,6 +855,7 @@ async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: �
     resize();
     nextQuest();
     const notes = [];
+    if (snapped) notes.push(`${name} 山頂（標高${summit}m）から見ています`);
     if (urbanStart) notes.push('市街地のため、ビルの屋上（地上30m）から見ています。▼で地上に降りられます');
     if (h === null) notes.push('コンパスが使えないため北向きで表示しています');
     if (notes.length) toast(notes.join('\n'), '', 4500);
@@ -874,6 +875,18 @@ function getPosition() {
   });
 }
 
+// 現在地が収録している山頂から SUMMIT_SNAP_M 以内なら、その山頂にいるとみなす
+// （GPS の位置のずれで、とがった山頂の地面が低く計算されるのを防ぐ）
+const SUMMIT_SNAP_M = 100;
+function nearbySummit(lat, lon) {
+  let best = null, bd = SUMMIT_SNAP_M;
+  for (const m of MOUNTAINS) {
+    const d = Math.hypot((m.lat - lat) * 111320, (m.lon - lon) * 111320 * Math.cos(lat * DEG));
+    if (d <= bd) { bd = d; best = m; }
+  }
+  return best;
+}
+
 const inJapan = (lat, lon) => lat > 20 && lat < 46.5 && lon > 122 && lon < 154.5;
 
 $('btn-start').addEventListener('click', async () => {
@@ -884,7 +897,9 @@ $('btn-start').addEventListener('click', async () => {
   try {
     const { lat, lon } = await getPosition();
     if (!inJapan(lat, lon)) { toast('現在地が日本国外のため、地点を選んでください', 'bad', 3500); openPicker(); return; }
-    startAt(lat, lon, { name: '現在地' });
+    const sm = nearbySummit(lat, lon);
+    if (sm) startAt(sm.lat, sm.lon, { name: uniqueName(sm), summit: sm.elev, snapped: true });
+    else startAt(lat, lon, { name: '現在地' });
   } catch {
     toast('現在地を取得できませんでした。地点を選んでください', 'bad', 3500);
     openPicker();
@@ -932,8 +947,9 @@ $('btn-picker-cancel').addEventListener('click', () => {
 $('btn-here').addEventListener('click', async () => {
   try {
     const { lat, lon } = await getPosition();
-    map.setView([lat, lon], 12);
-    pick(lat, lon, '現在地', false);
+    const sm = nearbySummit(lat, lon);
+    if (sm) { map.setView([sm.lat, sm.lon], 13); pick(sm.lat, sm.lon, uniqueName(sm), sm.elev); toast(`${uniqueName(sm)} 山頂の近くにいます`, '', 2500); }
+    else { map.setView([lat, lon], 12); pick(lat, lon, '現在地', false); }
   } catch { toast('現在地を取得できませんでした', 'bad'); }
 });
 $('search').addEventListener('change', (e) => {

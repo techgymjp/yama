@@ -108,7 +108,8 @@ async function load(lat, lon, onProgress) {
     const g = geo(s.lat, s.lon);
     s.dist = g.dist; s.az = g.az; s.base = sampleAt(s.lat, s.lon, 0);
   }
-  return { ground, urban: urbanRatioAround(lat, lon) };
+  // 標高の高い場所（山の岩場・雪）は写真が灰色でも市街地ではない（建物も 800m 以上には立てない）
+  return { ground, urban: ground < 800 ? urbanRatioAround(lat, lon) : 0 };
 }
 
 // 指定レイヤーでの双線形補間
