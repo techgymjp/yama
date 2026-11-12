@@ -71,7 +71,7 @@ button.secondary { background: rgba(255,255,255,0.16); }
 }
 #toolbar button { padding: 9px 13px; background: var(--glass); backdrop-filter: blur(6px); }
 #toolbar button.on { background: var(--accent2); }
-#score { background: var(--glass); padding: 9px 13px; border-radius: 999px; font-weight: 700; }
+#score { background: var(--glass); padding: 9px 13px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 #toast {
   white-space: pre-line;
@@ -135,7 +135,9 @@ button.secondary { background: rgba(255,255,255,0.16); }
 #result-score { font-size: 44px; font-weight: 800; line-height: 1.2; }
 #result-detail { font-size: 14px; opacity: 0.9; }
 #result-list { list-style: none; padding: 0; margin: 12px 0; text-align: left; font-size: 14px; }
-#result-list li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+#result-time { font-size: 20px; font-weight: 800; color: #9ad1ff; margin-top: 4px; }
+#result-list .t { margin-left: auto; opacity: 0.8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#result-list li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 #result-list .ok { color: #7CFFB2; white-space: nowrap; }
 #result-list .ng { color: #ff9b9b; white-space: nowrap; }
 .result-buttons { display: flex; flex-direction: column; gap: 8px; }

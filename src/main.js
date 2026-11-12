@@ -44,7 +44,7 @@ const state = {
   heading: 0, pitch: 2, fov: 60,
   peaks: [],            // 見える/見えない判定付き
   showLabels: false,
-  game: { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false },
+  game: { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false, qStart: 0, totalMs: 0 },
   found: null,          // { peak, until }
   tapMark: null,
 };
@@ -194,6 +194,7 @@ function unproject(x, y) {
 // 画面より広い範囲（横 2.4 倍・縦 1.6 倍）を描いておき、パン操作は描画済みの画像をずらすだけにする。
 // 描画済み範囲からはみ出したとき・拡大して粗くなったとき・視点が変わったときだけ描き直す。
 const MARGIN_X = 2.4, MARGIN_Y = 1.6;
+let panVelocity = 0;   // 方角の変化速度 [deg/s]（先読み描画用）
 let sceneVersion = 0; // 視点の高さ・積雪・建物など、景色そのものが変わったら増やす
 function invalidate() { sceneVersion++; requestRender(); }
 const fullQuality = () => Math.min(dpr, cssW < 700 ? 1.25 : 1.5);
@@ -229,14 +230,60 @@ function sendRender() {
   rendering = true;
   // 操作中は低解像度、止まったら高解像度
   const q = interacting ? lowQuality() : fullQuality();
+  // 操作中は動いている方向へ先回りして描く（0.35 秒先、最大で視野の 0.8 倍）
+  const lead = interacting ? Math.max(-state.fov * 0.8, Math.min(state.fov * 0.8, panVelocity * 0.35)) : 0;
   worker.postMessage({
     type: 'render', id: ++reqId, version: sceneVersion,
-    heading: state.heading, pitch: state.pitch, fov: Math.min(359, state.fov * MARGIN_X),
+    heading: (state.heading + lead + 360) % 360, pitch: state.pitch, fov: Math.min(359, state.fov * MARGIN_X),
     width: Math.round(cssW * Math.min(359 / state.fov, MARGIN_X) * q), height: Math.round(cssH * MARGIN_Y * q),
     h0: h0(), snowline: snowline(),
   });
 }
+// ---- 360°の低解像度パノラマ（下絵）: 素早いフリックで描画済み範囲を越えても空白にしない ----
+const PANO_W = 2048, PANO_STRIPS = 8, PANO_TAN = 0.36;
+const PANO_F = PANO_W / (2 * Math.PI);            // px / rad
+const PANO_H = Math.round(2 * PANO_F * PANO_TAN);
+const panoCanvas = document.createElement('canvas');
+panoCanvas.width = PANO_W; panoCanvas.height = PANO_H;
+const pctx = panoCanvas.getContext('2d');
+let panoStrips = [];      // 各帯の sceneVersion（描けていなければ -1）
+let panoHasAny = false;
+function resetPano() { panoStrips = new Array(PANO_STRIPS).fill(-1); }
+resetPano();
+function nextPanoStrip() {
+  // 今見ている方角に近い帯から順に描く
+  const cur = Math.floor(((state.heading % 360) + 360) % 360 / (360 / PANO_STRIPS));
+  for (let k = 0; k < PANO_STRIPS; k++) {
+    const i = (cur + (k % 2 ? (k + 1) / 2 : -k / 2) + PANO_STRIPS) % PANO_STRIPS;
+    if (panoStrips[i] !== sceneVersion) return i;
+  }
+  return -1;
+}
+function sendPanoStrip() {
+  const i = nextPanoStrip();
+  if (i < 0 || !state.obs) return false;
+  rendering = true;
+  const sw = PANO_W / PANO_STRIPS;
+  worker.postMessage({
+    type: 'render', id: ++reqId, version: sceneVersion, pano: i,
+    heading: (i + 0.5) * (360 / PANO_STRIPS), pitch: 0, fov: 360 / PANO_STRIPS,
+    width: sw, height: PANO_H, h0: h0(), snowline: snowline(),
+  });
+  return true;
+}
+
 function onRendered(m) {
+  if (m.params.pano !== undefined) {
+    rendering = false;
+    const i = m.params.pano;
+    pctx.putImageData(m.img, i * (PANO_W / PANO_STRIPS), 0);
+    panoStrips[i] = m.params.version;
+    panoHasAny = true;
+    if (dirty || needsRender(!interacting)) sendRender();
+    else sendPanoStrip();
+    draw();
+    return;
+  }
   window.__lastRenderMs = m.ms;
   window.__renderCount = (window.__renderCount || 0) + 1;
   rendering = false;
@@ -245,20 +292,40 @@ function onRendered(m) {
   imgParams = m.params;
   draw();
   if (dirty || needsRender(!interacting)) sendRender();
+  else if (!interacting) sendPanoStrip(); // 手が空いたら下絵を描く
 }
 
 function draw() {
   const W = scene.width, H = scene.height;
+  const fNow = W / (state.fov * DEG);
+  const tp = Math.tan(state.pitch * DEG);
+  if (imgParams || panoHasAny) {
+    // 空のグラデーションで下塗り
+    const horizon = H / 2 + fNow * tp;
+    const grad = sctx.createLinearGradient(0, horizon - fNow * 0.6, 0, horizon);
+    grad.addColorStop(0, '#5080d0'); grad.addColorStop(1, '#c8daee');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, W, H);
+    sctx.imageSmoothingEnabled = true;
+  }
+  if (panoHasAny) {
+    // 360°パノラマを左右につないで描く
+    const s = fNow / PANO_F;
+    const yTop = H / 2 - fNow * (PANO_TAN - tp);
+    const x0 = W / 2 - ((((state.heading % 360) + 360) % 360) * DEG) * fNow;
+    const pw = PANO_W * s;
+    for (let k = -1; k <= 1; k++) {
+      const x = x0 + k * pw;
+      if (x + pw < 0 || x > W) continue;
+      sctx.drawImage(panoCanvas, x, yTop, pw, PANO_H * s);
+    }
+  }
   if (imgParams) {
     const p = imgParams;
-    const fNow = W / (state.fov * DEG);
     const fImg = p.width / (p.fov * DEG);
     const s = fNow / fImg;
     const xc = W / 2 + wrap180(p.heading - state.heading) * DEG * fNow;
-    const yc = H / 2 - fNow * (Math.tan(p.pitch * DEG) - Math.tan(state.pitch * DEG));
-    sctx.fillStyle = '#9fb7cf';
-    sctx.fillRect(0, 0, W, H);
-    sctx.imageSmoothingEnabled = true;
+    const yc = H / 2 - fNow * (Math.tan(p.pitch * DEG) - tp);
     sctx.drawImage(imgCanvas, xc - p.width * s / 2, yc - p.height * s / 2, p.width * s, p.height * s);
   }
   drawOverlay();
@@ -382,7 +449,7 @@ const view = $('view');
 function setInteracting(on) {
   clearTimeout(idleTimer);
   if (on) interacting = true;
-  else idleTimer = setTimeout(() => { interacting = false; requestRender(); }, 180);
+  else idleTimer = setTimeout(() => { interacting = false; panVelocity = 0; requestRender(); }, 180);
 }
 function clampView() {
   state.fov = Math.max(2, Math.min(100, state.fov));
@@ -421,7 +488,17 @@ view.addEventListener('pointermove', (e) => {
       state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + (p.y - gesture.my) / f) / DEG;
     }
   }
-  if (gesture.moved) { clampView(); setInteracting(true); requestRender(); }
+  if (gesture.moved) {
+    clampView();
+    const now = performance.now();
+    if (gesture.lastT) {
+      const dt = Math.max(1, now - gesture.lastT) / 1000;
+      const v = wrap180(state.heading - gesture.lastH) / dt;
+      panVelocity = panVelocity * 0.6 + v * 0.4;
+    }
+    gesture.lastT = now; gesture.lastH = state.heading;
+    setInteracting(true); requestRender();
+  }
 });
 function endPointer(e) {
   const p = pointers.get(e.pointerId);
@@ -521,14 +598,32 @@ function autoFrame() {
 }
 
 function resetGame() {
-  Object.assign(state.game, { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false });
+  Object.assign(state.game, { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false, qStart: 0, totalMs: 0 });
   $('result').classList.add('hidden');
   updateScore();
 }
+// ---- タイム（各問の出題から正解・パスまで） ----
+const fmtTime = (ms) => {
+  const t = ms / 1000;
+  return t < 60 ? `${t.toFixed(1)}秒` : `${Math.floor(t / 60)}分${(t % 60).toFixed(1).padStart(4, '0')}秒`;
+};
+const questionRunning = () => { const g = state.game; return g.target && !g.waiting && !g.finished && !g.revealed && g.qStart; };
+function elapsedMs() {
+  const g = state.game;
+  return g.totalMs + (questionRunning() ? performance.now() - g.qStart : 0);
+}
+function stopQuestionTimer() {
+  const g = state.game;
+  const ms = g.qStart ? performance.now() - g.qStart : 0;
+  g.totalMs += ms;
+  g.qStart = 0;
+  return ms;
+}
 function updateScore() {
   const g = state.game;
-  $('score').textContent = `${Math.max(1, g.round)}/${TOTAL_QUESTIONS}問・${g.points}点`;
+  $('score').textContent = `${Math.max(1, g.round)}/${TOTAL_QUESTIONS}問・${g.points}点・⏱${Math.floor(elapsedMs() / 1000)}秒`;
 }
+setInterval(() => { if (state.obs && questionRunning()) updateScore(); }, 250);
 
 function nextQuest() {
   const g = state.game;
@@ -553,6 +648,7 @@ function nextQuest() {
   for (const p of list) { r -= weight(p); if (r <= 0) { pick = p; break; } }
   g.target = pick;
   g.round++;
+  g.qStart = performance.now();
   updateScore();
   g.recent = [pick.name, ...g.recent].slice(0, Math.min(8, Math.floor(cands.length / 2)));
   $('quest-name').textContent = pick.name;
@@ -571,12 +667,13 @@ function onTap(x, y) {
   state.tapMark = { az, tanAlt, ok: hit, until: performance.now() + 1200 };
   if (hit) {
     const pts = Math.max(10, 100 - g.misses * 20 - (g.hinted ? 30 : 0));
+    const ms = stopQuestionTimer();
     g.correct++;
     g.points += pts;
-    g.history.push({ name: g.target.name, ok: true, pts });
+    g.history.push({ name: g.target.name, ok: true, pts, ms });
     updateScore();
     sfx('correct');
-    toast(`正解！ ${g.target.name}（${fmtDist(g.target.dist)}先） +${pts}点`, 'good', 2500);
+    toast(`正解！ ${g.target.name}（${fmtDist(g.target.dist)}先）\n+${pts}点・${fmtTime(ms)}`, 'good', 2500);
     state.found = { peak: g.target, until: performance.now() + 3000 };
     g.target = null;
     g.waiting = true;
@@ -618,8 +715,10 @@ function showResult() {
   $('result-title').textContent = title;
   $('result-score').textContent = `${g.points}点`;
   $('result-detail').textContent = `${TOTAL_QUESTIONS}問中 ${g.correct}問正解（${max}点満点）`;
+  $('result-time').textContent = `タイム ${fmtTime(g.totalMs)}`;
   $('result-list').innerHTML = g.history.map((h, i) =>
-    `<li><span>第${i + 1}問 ${h.name}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? `○ ${h.pts}点` : '× パス'}</span></li>`).join('');
+    `<li><span>第${i + 1}問 ${h.name}</span><span class="t">${fmtTime(h.ms)}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? `○ ${h.pts}点` : '× パス'}</span></li>`).join('');
+  updateScore();
   $('result').classList.remove('hidden');
   sfx(rate >= 0.45 ? 'result' : 'resultLow');
   $('quest-name').textContent = '結果発表';
@@ -639,7 +738,8 @@ $('btn-skip').addEventListener('click', () => {
   if (!g.target) { nextQuest(); return; }
   g.revealed = true;
   g.waiting = true;
-  g.history.push({ name: g.target.name, ok: false, pts: 0 });
+  g.history.push({ name: g.target.name, ok: false, pts: 0, ms: stopQuestionTimer() });
+  updateScore();
   sfx('reveal');
   toast(`正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`, '', 3000);
   animateTo(g.target.az, Math.atan(g.target.tanAlt) / DEG + 3);
@@ -730,6 +830,8 @@ async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: �
     const pk = await call({ type: 'peaks', h0: h0() });
     state.peaks = pk.peaks;
     resetGame();
+    // 別の場所のパノラマが見えないように消しておく
+    panoHasAny = false; pctx.clearRect(0, 0, PANO_W, PANO_H); resetPano();
     autoFrame();
     if (bgmOn) audio.start();
     $('loading').classList.add('hidden');
