@@ -75,5 +75,5 @@ for (const [name, yomi, elev, lat, lon, cls] of raw) {
   console.log(`${name.padEnd(10,'　')} ${elev}m dem=${demE.toFixed(0)} diff=${diff.toFixed(0)} shift=${shift.toFixed(0)}m${flag}`);
   if (!flag) out.push({ name, yomi, elev, lat: +latOf(by+0.5).toFixed(5), lon: +lonOf(bx+0.5).toFixed(5), cls, hyakumeizan: cls === 100 });
 }
-fs.writeFileSync('src/data/mountains.json', JSON.stringify(out, null, 0).replace(/\},\{/g, '},\n{') + '\n');
+fs.writeFileSync('data/manual-snapped.json', JSON.stringify(out, null, 0).replace(/\},\{/g, '},\n{') + '\n');
 console.log(`total ${out.length}, dropped ${bad}: ${dropped.join(' ')}`);

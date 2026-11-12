@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MOUNTAINS from './data/mountains.json';
+import STRUCTURES from './data/structures.json';
 
 const DEG = Math.PI / 180;
 const $ = (id) => document.getElementById(id);
@@ -11,6 +12,19 @@ const fmtDist = (m) => (m < 10000 ? (m / 1000).toFixed(1) : Math.round(m / 1000)
 const CLASS_LABEL = { 100: '日本百名山', 200: '日本二百名山', 300: '日本三百名山' };
 const RANK = { 100: 3, 200: 2, 300: 1, 0: 0 };
 const rank = (p) => RANK[p.cls] || 0;
+// 同名の山を区別するための表示名（例: 駒ヶ岳（北海道））
+const NAME_COUNT = {};
+for (const m of MOUNTAINS) NAME_COUNT[m.name] = (NAME_COUNT[m.name] || 0) + 1;
+const uniqueName = (m) => (NAME_COUNT[m.name] > 1 && m.pref ? `${m.name}（${m.pref}）` : m.name);
+function describe(p) {
+  if (p.structure) return `${p.yomi}・高さ${p.height}m の構造物`;
+  const parts = [p.yomi];
+  if (p.alias || p.group) parts.push([p.alias, p.group].filter(Boolean).join('・'));
+  if (p.pref) parts.push(p.pref);
+  parts.push(`標高${p.elev}m`);
+  if (CLASS_LABEL[p.cls]) parts.push(CLASS_LABEL[p.cls]);
+  return parts.join('・');
+}
 const HEIGHTS = [1.6, 5, 10, 20, 30, 50, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000];
 
 // ---------------- 状態 ----------------
@@ -86,8 +100,22 @@ async function fetchTile(src, z, x, y) {
   }
   return out;
 }
+// 地理院タイル シームレス空中写真 → RGBA（a=0 はデータなし）
+async function fetchPhoto(z, x, y) {
+  const res = await fetch(`https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/${z}/${x}/${y}.jpg`, { mode: 'cors' });
+  if (!res.ok) return null;
+  const img = await loadImage(await res.blob());
+  decodeCtx.clearRect(0, 0, 256, 256);
+  decodeCtx.drawImage(img, 0, 0);
+  return new Uint8Array(decodeCtx.getImageData(0, 0, 256, 256).data.buffer.slice(0));
+}
 async function provideTile(m) {
   let data = null;
+  if (m.kind === 'photo') {
+    try { data = await fetchPhoto(m.z, m.x, m.y); } catch { data = null; }
+    worker.postMessage({ type: 'tile', tid: m.tid, data }, data ? [data.buffer] : []);
+    return;
+  }
   try {
     data = await fetchTile(m.source, m.z, m.x, m.y);
   } catch {
@@ -121,7 +149,8 @@ worker.onmessage = (e) => {
   if (m.type === 'error') p.reject(new Error(m.message)); else p.resolve(m);
 };
 function initWorker() {
-  worker.postMessage({ type: 'init', peaks: MOUNTAINS, source: $('opt-source').value });
+  worker.postMessage({ type: 'init', peaks: MOUNTAINS, structures: STRUCTURES, source: $('opt-source').value });
+  worker.postMessage({ type: 'options', buildings: $('opt-buildings').checked });
 }
 
 // ---------------- 描画 ----------------
@@ -294,7 +323,7 @@ function setInteracting(on) {
   else idleTimer = setTimeout(() => { interacting = false; requestRender(); }, 180);
 }
 function clampView() {
-  state.fov = Math.max(5, Math.min(100, state.fov));
+  state.fov = Math.max(2, Math.min(100, state.fov));
   state.pitch = Math.max(-40, Math.min(40, state.pitch));
   state.heading = (state.heading + 360) % 360;
 }
@@ -410,6 +439,25 @@ function toast(msg, cls = '', ms = 2200) {
   toast.timer = setTimeout(() => { t.className = ''; }, ms);
 }
 
+// 見えている山がちょうどよい大きさになるようにズーム（画角）と上下の角度を決める
+function autoFrame() {
+  const ts = state.peaks.filter((p) => p.visible && !p.here && !p.structure && p.dist > 1000).map((p) => p.tanAlt).sort((a, b) => a - b);
+  if (!ts.length) return;
+  const hi = ts[Math.min(ts.length - 1, Math.floor(ts.length * 0.95))];
+  const lo = Math.max(Math.min(ts[0], 0), hi - 0.12);
+  const amp = Math.max(hi - lo, 0.004);
+  const W = window.innerWidth, H = window.innerHeight;
+  // 山の高さが画面の高さの約 25% になる焦点距離
+  let f = H * 0.25 / amp;
+  const minFov = W < H ? 8 : 12;
+  let fov = W / f / DEG;
+  fov = Math.max(minFov, Math.min(60, fov));
+  f = W / (fov * DEG);
+  state.fov = fov;
+  // 山の裾を画面の下から 40% あたりに置く
+  state.pitch = Math.atan(lo + 0.1 * H / f) / DEG;
+}
+
 function nextQuest() {
   const g = state.game;
   const cands = state.peaks.filter((p) => p.visible && !p.here && p.dist > 800 && p.dist < 260000);
@@ -424,7 +472,7 @@ function nextQuest() {
     return;
   }
   // 百名山・富士山・目立つ山を出やすく
-  const weight = (p) => (p.name === '富士山' ? 6 : 1) * [1, 1.5, 2, 3][rank(p)] * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
+  const weight = (p) => (p.name === '富士山' ? 6 : 1) * (p.structure ? 8 : [1, 3, 5, 10][rank(p)]) * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
   let r = Math.random() * list.reduce((s, p) => s + weight(p), 0);
   let pick = list[0];
   for (const p of list) { r -= weight(p); if (r <= 0) { pick = p; break; } }
@@ -433,7 +481,7 @@ function nextQuest() {
   g.recent = [pick.name, ...g.recent].slice(0, Math.min(8, Math.floor(cands.length / 2)));
   $('quest-name').textContent = pick.name;
   $('quest-suffix').textContent = 'を探して！';
-  $('quest-sub').textContent = `${pick.yomi}・標高${pick.elev}m${CLASS_LABEL[pick.cls] ? '・' + CLASS_LABEL[pick.cls] : ''}`;
+  $('quest-sub').textContent = describe(pick);
   draw();
 }
 
@@ -543,7 +591,9 @@ async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: �
     let ground = r.ground;
     if (summit) ground = Math.max(ground, summit);
     state.obs = { lat, lon, ground, name };
-    state.hIdx = 0;
+    // 市街地では建物に視界をさえぎられるので、屋上の高さ(30m)から始める
+    const urbanStart = !summit && $('opt-buildings').checked && r.urban > 0.35;
+    state.hIdx = urbanStart ? HEIGHTS.indexOf(30) : 0;
     const h = await readHeading();
     state.heading = h ?? 0;
     state.pitch = 2;
@@ -554,10 +604,14 @@ async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: �
     state.peaks = pk.peaks;
     state.game.target = null;
     state.game.recent = [];
+    autoFrame();
     $('loading').classList.add('hidden');
     resize();
     nextQuest();
-    if (h === null) toast('コンパスが使えないため北向きで表示しています', '', 3000);
+    const notes = [];
+    if (urbanStart) notes.push('市街地のため、ビルの屋上（地上30m）から見ています。▼で地上に降りられます');
+    if (h === null) notes.push('コンパスが使えないため北向きで表示しています');
+    if (notes.length) toast(notes.join('\n'), '', 4500);
   } catch (err) {
     $('loading').classList.add('hidden');
     toast(`読み込みに失敗しました: ${err.message}`, 'bad', 4000);
@@ -603,7 +657,7 @@ function openPicker() {
     marker = L.marker([0, 0], { icon });
     for (const m of MOUNTAINS) {
       L.circleMarker([m.lat, m.lon], { radius: 2 + rank(m) * 0.7, color: ['#6c757d', '#52796f', '#2a6f97', '#c1121f'][rank(m)], weight: 1, fillOpacity: 0.8 })
-        .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => pick(m.lat, m.lon, m.name, m.elev)).addTo(map);
+        .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => pick(m.lat, m.lon, uniqueName(m), m.elev)).addTo(map);
     }
     map.on('click', (e) => pick(e.latlng.lat, e.latlng.lng, '', false));
     if (state.obs) pick(state.obs.lat, state.obs.lon, state.obs.name, false);
@@ -633,17 +687,22 @@ $('btn-here').addEventListener('click', async () => {
   } catch { toast('現在地を取得できませんでした', 'bad'); }
 });
 $('search').addEventListener('change', (e) => {
-  const m = MOUNTAINS.find((x) => x.name === e.target.value.trim() || x.yomi === e.target.value.trim());
+  const v = e.target.value.trim();
+  const m = MOUNTAINS.find((x) => uniqueName(x) === v) || MOUNTAINS.find((x) => x.name === v || x.yomi === v || x.alias === v);
   if (!m) return;
   map.setView([m.lat, m.lon], 12);
-  pick(m.lat, m.lon, m.name, m.elev);
+  pick(m.lat, m.lon, uniqueName(m), m.elev);
   e.target.blur();
 });
 
 // datalist
-$('peak-list').innerHTML = MOUNTAINS.map((m) => `<option value="${m.name}">${m.yomi} ${m.elev}m</option>`).join('');
+$('peak-list').innerHTML = MOUNTAINS.map((m) => `<option value="${uniqueName(m)}">${m.yomi} ${m.elev}m</option>`).join('');
 $('peak-count').textContent = MOUNTAINS.length;
 $('opt-source').addEventListener('change', () => initWorker());
 $('opt-snow').addEventListener('change', () => requestRender());
+$('opt-buildings').addEventListener('change', () => {
+  worker.postMessage({ type: 'options', buildings: $('opt-buildings').checked });
+  if (state.obs) { requestRender(); refreshPeaks(); }
+});
 resize();
 window.__yama = state; // デバッグ用

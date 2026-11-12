@@ -1,7 +1,7 @@
 # 山探し
 
 目の前に広がる景色から、お題の山を探してタップするWebゲームです。
-国土地理院の標高タイルと、日本百名山・二百名山・三百名山などの山のデータから、
+国土地理院の標高タイル・空中写真と、国土地理院「日本の主な山岳標高」（約1,000座、百名山・二百名山・三百名山の区分つき）や高さ100m以上の主な構造物のデータから、
 その地点から実際に見える山の景色をブラウザ上で再現します。
 
 ## 遊び方
@@ -28,10 +28,19 @@
     陰影・空気遠近法・季節に応じた積雪・稜線の輪郭線を付けています。
   - 各山について視線上の地形と比較し、実際に見えるかどうかを判定します。
 - `src/main.js`：UI、ジェスチャー、コンパス、ゲーム進行、地図（Leaflet + 地理院タイル）での地点選択
-- `src/data/mountains.raw.js`：山のリスト（名前・よみ・標高・おおよその座標・区分＝百/二百/三百名山）
-- `scripts/validate-mountains.mjs`：DEM から山頂の正確な位置を探して座標を補正し、`src/data/mountains.json` を生成
+- `data/gsi-1003zan-20260331.csv`：国土地理院「日本の主な山岳標高」（2026年3月31日版、UTF-8 に変換）
+- `src/data/mountains.raw.js`：手入力の山リスト（区分＝百/二百/三百名山）。区分の付与と、地理院リストにない山の補完に使用
+- `scripts/validate-mountains.mjs`：手入力リストの座標を DEM で補正し `data/manual-snapped.json` を生成
+- `scripts/build-mountains.mjs`：地理院リストと手入力リストを突き合わせて `src/data/mountains.json` を生成
+- `src/data/structures.json`：高さ100m以上の主な構造物（東京スカイツリー等。位置・寸法はおおよその値）
 
-山を追加するには `mountains.raw.js` に行を足して `npm run data:mountains` を実行します。
+山を追加・区分を直すには `mountains.raw.js` を編集して `npm run data:mountains` を実行します。
+
+### 景色の表現
+- 近く（〜5km）の地表は地理院の空中写真の色で塗ります。
+- 空中写真で市街地（灰色系）と判定された場所には、約15m四方の区画ごとに建物を立てます（高さは疑似乱数で決めた架空のもので、実際の建物ではありません）。建物は視界をさえぎり、見える山の判定にも反映されます。設定の「街並み」でオフにできます。
+- 市街地から始めると、ビルの屋上（地上30m）からの眺めになります。
+- 開始時に、見えている山がちょうどよい大きさになるようズーム（望遠）を自動で合わせます。
 
 ## 開発
 
@@ -47,6 +56,8 @@ npm run build    # dist/ に静的ファイルを出力
 
 ## データの出典
 
+- 山の一覧：[国土地理院「日本の主な山岳標高」](https://www.gsi.go.jp/kihonjohochousa/kihonjohochousa41139.html)（国土地理院コンテンツ利用規約に基づき加工して利用）
+- 空中写真：[地理院タイル（全国最新写真（シームレス））](https://maps.gsi.go.jp/development/ichiran.html)
 - 標高：[国土地理院 地理院タイル（標高タイル）](https://maps.gsi.go.jp/development/demtile.html)、
   [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/)
 - 地図：[地理院タイル（淡色地図）](https://maps.gsi.go.jp/development/ichiran.html)
