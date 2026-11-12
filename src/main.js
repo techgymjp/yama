@@ -2,6 +2,15 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MOUNTAINS from './data/mountains.json';
 import STRUCTURES from './data/structures.json';
+import { createBgm } from './bgm.js';
+
+// ---------------- サウンド（BGM・効果音） ----------------
+const audio = createBgm();
+const pref = (k, def) => { try { const v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch { return def; } };
+const savePref = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* 保存できない環境 */ } };
+let bgmOn = pref('yama.bgm', true);
+let sfxOn = pref('yama.sfx', true);
+const sfx = (name) => { if (sfxOn) audio.sfx(name); };
 
 const DEG = Math.PI / 180;
 const $ = (id) => document.getElementById(id);
@@ -497,6 +506,7 @@ function onTap(x, y) {
     const pts = Math.max(10, 100 - g.misses * 20 - (g.hinted ? 30 : 0));
     g.score++;
     $('score').textContent = `正解 ${g.score}`;
+    sfx('correct');
     toast(`正解！ ${g.target.name}（${fmtDist(g.target.dist)}先） +${pts}点`, 'good', 2500);
     state.found = { peak: g.target, until: performance.now() + 3000 };
     g.target = null;
@@ -512,6 +522,7 @@ function onTap(x, y) {
       const d = Math.hypot(q.x - x, Math.max(0, q.y - y - 10) * 0.5 + Math.max(0, y - q.y - 60));
       if (Math.abs(q.x - x) < bd && d < bd) { bd = d; best = p; }
     }
+    sfx('wrong');
     toast(best ? `そこは ${best.name}（${best.yomi}）です` : 'ちがいます…', 'bad');
     if (g.misses >= 3 && !g.hinted) showHint();
   }
@@ -526,11 +537,12 @@ function showHint() {
   $('quest-sub').textContent = `ヒント: ${dirName(g.target.az)}の方角（${Math.round(g.target.az)}°）・${fmtDist(g.target.dist)}先`;
   draw();
 }
-$('btn-hint').addEventListener('click', showHint);
+$('btn-hint').addEventListener('click', () => { sfx('click'); showHint(); });
 $('btn-skip').addEventListener('click', () => {
   const g = state.game;
   if (!g.target || g.revealed) { nextQuest(); return; }
   g.revealed = true;
+  sfx('reveal');
   toast(`正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`, '', 3000);
   animateTo(g.target.az, Math.atan(g.target.tanAlt) / DEG + 3);
   setTimeout(nextQuest, 3200);
@@ -540,7 +552,24 @@ $('btn-labels').addEventListener('click', () => {
   $('btn-labels').classList.toggle('on', state.showLabels);
   draw();
 });
-$('btn-place').addEventListener('click', () => openPicker());
+$('btn-place').addEventListener('click', () => { sfx('click'); openPicker(); });
+// BGM のオン・オフ
+function updateBgmButton() {
+  $('btn-bgm').classList.toggle('on', bgmOn);
+  $('btn-bgm').textContent = bgmOn ? '♪ BGM' : '♪ オフ';
+}
+$('btn-bgm').addEventListener('click', () => {
+  bgmOn = !bgmOn;
+  savePref('yama.bgm', bgmOn);
+  audio.unlock();
+  if (bgmOn) audio.start(); else audio.stop();
+  updateBgmButton();
+});
+updateBgmButton();
+$('opt-sfx').checked = sfxOn;
+$('opt-sfx').addEventListener('change', () => { sfxOn = $('opt-sfx').checked; savePref('yama.sfx', sfxOn); });
+// 画面が隠れたら音を止める
+document.addEventListener('visibilitychange', () => { if (document.hidden) audio.suspend(); else audio.resume(); });
 
 function animateTo(az, pitch) {
   const h0 = state.heading, p0 = state.pitch, dh = wrap180(az - h0), dp = pitch - p0;
@@ -605,6 +634,7 @@ async function startAt(lat, lon, { name = '', summit = 0 } = {}) {  // summit: �
     state.game.target = null;
     state.game.recent = [];
     autoFrame();
+    if (bgmOn) audio.start();
     $('loading').classList.add('hidden');
     resize();
     nextQuest();
@@ -631,6 +661,8 @@ function getPosition() {
 const inJapan = (lat, lon) => lat > 20 && lat < 46.5 && lon > 122 && lon < 154.5;
 
 $('btn-start').addEventListener('click', async () => {
+  audio.unlock();
+  sfx('start');
   initWorker();
   enableCompass();
   try {
@@ -642,7 +674,7 @@ $('btn-start').addEventListener('click', async () => {
     openPicker();
   }
 });
-$('btn-start-place').addEventListener('click', () => { initWorker(); enableCompass(); openPicker(); });
+$('btn-start-place').addEventListener('click', () => { audio.unlock(); sfx('click'); initWorker(); enableCompass(); openPicker(); });
 
 // ---------------- 地点選択（地図） ----------------
 let map = null, marker = null, picked = null;
@@ -672,6 +704,8 @@ function pick(lat, lon, name, summit) {
 }
 $('btn-picker-ok').addEventListener('click', () => {
   if (!picked) return;
+  audio.unlock();
+  sfx('start');
   enableCompass();
   startAt(picked.lat, picked.lon, { name: picked.name || '選択地点', summit: picked.summit });
 });
