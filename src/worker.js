@@ -15,63 +15,23 @@ const LEVELS = [
   { z: 8, radius: MAX_DIST },
 ];
 
-const SOURCES = {
-  gsi: {
-    url: (z, x, y) => `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`,
-    // 地理院 標高タイル(PNG): x = R*2^16 + G*2^8 + B, 0.01m 単位, 2^23 は無効値(海など)
-    decode(r, g, b) {
-      const v = r * 65536 + g * 256 + b;
-      if (v === 8388608) return 0;
-      return (v < 8388608 ? v : v - 16777216) * 0.01;
-    },
-    notFoundIsSea: true,
-  },
-  terrarium: {
-    url: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
-    decode: (r, g, b) => r * 256 + g + b / 256 - 32768,
-    notFoundIsSea: true,
-  },
-};
-
 let source = 'gsi';
 let levels = [];       // { z, x0, y0, w, h, data, radius, n }
 let observer = null;   // { lat, lon, ground }
 let peaks = [];
 
-const tileCache = new Map(); // key -> Float32Array(65536)
-
-async function fetchTile(src, z, x, y) {
-  const s = SOURCES[src];
-  const res = await fetch(s.url(z, x, y), { mode: 'cors' });
-  if (res.status === 404 && s.notFoundIsSea) return null;
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const bmp = await createImageBitmap(await res.blob());
-  const cv = new OffscreenCanvas(256, 256);
-  const ctx = cv.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(bmp, 0, 0);
-  const px = ctx.getImageData(0, 0, 256, 256).data;
-  const out = new Float32Array(65536);
-  for (let i = 0; i < 65536; i++) {
-    const h = s.decode(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]);
-    out[i] = h > 0 ? h : 0; // 海面下は 0 に
-  }
-  return out;
-}
-
-async function getTile(z, x, y) {
+// タイルの取得・デコードはメインスレッドで行う（OffscreenCanvas 非対応のブラウザ向け）
+const tileCache = new Map(); // key -> Float32Array(65536) | null
+const tileWaiters = new Map();
+let tileReq = 0;
+function getTile(z, x, y) {
   const key = `${source}/${z}/${x}/${y}`;
-  if (tileCache.has(key)) return tileCache.get(key);
-  let t;
-  try {
-    t = await fetchTile(source, z, x, y);
-  } catch (e) {
-    // 地理院タイルが取得できない場合は AWS Terrain Tiles にフォールバック
-    if (source !== 'terrarium') {
-      try { t = await fetchTile('terrarium', z, x, y); } catch { t = null; }
-    } else t = null;
-  }
-  tileCache.set(key, t);
-  return t;
+  if (tileCache.has(key)) return Promise.resolve(tileCache.get(key));
+  return new Promise((resolve) => {
+    const id = ++tileReq;
+    tileWaiters.set(id, (data) => { tileCache.set(key, data); resolve(data); });
+    self.postMessage({ type: 'needTile', tid: id, source, z, x, y });
+  });
 }
 
 const mercX = (lon) => (lon + 180) / 360;
@@ -284,6 +244,12 @@ function computePeaks(h0) {
 self.onmessage = async (e) => {
   const m = e.data;
   try {
+    if (m.type === 'tile') {
+      const f = tileWaiters.get(m.tid);
+      tileWaiters.delete(m.tid);
+      if (f) f(m.data);
+      return;
+    }
     if (m.type === 'init') { peaks = m.peaks; source = m.source || 'gsi'; }
     else if (m.type === 'load') {
       const ground = await load(m.lat, m.lon, (p) => self.postMessage({ type: 'progress', p }));

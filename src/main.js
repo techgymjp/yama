@@ -34,8 +34,72 @@ function snowline() {
   return { 1: 1500, 2: 1500, 3: 1600, 4: 1900, 5: 2300, 6: 2700, 7: 0, 8: 0, 9: 0, 10: 2900, 11: 2500, 12: 1700 }[m];
 }
 
+// ---------------- 画面上のエラー表示 ----------------
+function showError(msg) {
+  try { toast(`エラー: ${msg}`, 'bad', 6000); } catch { alert(`エラー: ${msg}`); }
+}
+window.addEventListener('error', (e) => showError(e.message || String(e.error)));
+window.addEventListener('unhandledrejection', (e) => showError((e.reason && e.reason.message) || String(e.reason)));
+
+// ---------------- 標高タイル（メインスレッドで取得・デコード） ----------------
+const DEM_SOURCES = {
+  gsi: {
+    url: (z, x, y) => `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`,
+    // 地理院 標高タイル(PNG): x = R*2^16 + G*2^8 + B, 0.01m 単位, 2^23 は無効値(海など)
+    decode(r, g, b) {
+      const v = r * 65536 + g * 256 + b;
+      if (v === 8388608) return 0;
+      return (v < 8388608 ? v : v - 16777216) * 0.01;
+    },
+  },
+  terrarium: {
+    url: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
+    decode: (r, g, b) => r * 256 + g + b / 256 - 32768,
+  },
+};
+const decodeCanvas = document.createElement('canvas');
+decodeCanvas.width = decodeCanvas.height = 256;
+const decodeCtx = decodeCanvas.getContext('2d', { willReadFrequently: true });
+
+function loadImage(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗')); };
+    img.src = url;
+  });
+}
+async function fetchTile(src, z, x, y) {
+  const s = DEM_SOURCES[src];
+  const res = await fetch(s.url(z, x, y), { mode: 'cors' });
+  if (res.status === 404) return null; // 海など
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const img = await loadImage(await res.blob());
+  decodeCtx.clearRect(0, 0, 256, 256);
+  decodeCtx.drawImage(img, 0, 0);
+  const px = decodeCtx.getImageData(0, 0, 256, 256).data;
+  const out = new Float32Array(65536);
+  for (let i = 0; i < 65536; i++) {
+    const h = s.decode(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]);
+    out[i] = h > 0 ? h : 0; // 海面下は 0 に
+  }
+  return out;
+}
+async function provideTile(m) {
+  let data = null;
+  try {
+    data = await fetchTile(m.source, m.z, m.x, m.y);
+  } catch {
+    // 地理院タイルが取得できない場合は AWS Terrain Tiles にフォールバック
+    if (m.source !== 'terrarium') { try { data = await fetchTile('terrarium', m.z, m.x, m.y); } catch { data = null; } }
+  }
+  worker.postMessage({ type: 'tile', tid: m.tid, data }, data ? [data.buffer] : []);
+}
+
 // ---------------- Worker ----------------
-const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+// 古いブラウザでも動くよう classic worker として読み込む
+const worker = new Worker(new URL('./worker.js', import.meta.url));
 let reqId = 0;
 const pending = new Map();
 function call(msg) {
@@ -45,8 +109,10 @@ function call(msg) {
     worker.postMessage({ ...msg, id });
   });
 }
+worker.onerror = (e) => showError(`Worker: ${e.message || '読み込みに失敗しました'}`);
 worker.onmessage = (e) => {
   const m = e.data;
+  if (m.type === 'needTile') { provideTile(m); return; }
   if (m.type === 'progress') { $('loading-bar').style.width = `${Math.round(m.p * 100)}%`; return; }
   if (m.type === 'rendered') { onRendered(m); return; }
   const p = pending.get(m.id);
