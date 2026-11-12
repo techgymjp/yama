@@ -376,8 +376,15 @@ function drawHintBadge(diff) {
   octx.font = 'bold 17px system-ui, sans-serif';
   const tw = octx.measureText(text).width;
   const w = tw + 52, h = 44, r = h / 2;
-  const top = Math.max(120, Math.min(cssH * 0.4, cssH - 260));
-  const x = right ? cssW - w - 12 : 12, y = top;
+  // 実際のボタン位置を見て、上部のお題・下部のツールバー・右下の高さボタンを避ける
+  const rect = (id) => document.getElementById(id).getBoundingClientRect();
+  const topLimit = rect('topbar').bottom + 10;
+  const tb = rect('toolbar');
+  const bottomLimit = (tb.height ? Math.min(tb.top, cssH) : cssH) - 10;
+  const y = Math.max(topLimit, Math.min((topLimit + bottomLimit) / 2 - h / 2, bottomLimit - h));
+  const hc = rect('height-ctrl');
+  const rightEdge = Math.min(cssW - 12, hc.width ? hc.left - 14 : cssW - 12);
+  const x = right ? rightEdge - w : 12;
   // 少し脈打つ
   const pulse = 1 + 0.04 * Math.sin(performance.now() / 180);
   octx.save();
