@@ -379,7 +379,7 @@ function render({ heading, pitch, fov, width, height, h0, snowline }) {
       }
       prevBuilding = hb;
       // 建物のある近距離は細かく進む
-      d += d < BUILDING_MAX_DIST && buildingsOn ? Math.max(3, d * 0.003) : Math.max(6, d * 0.0035);
+      d += d < BUILDING_MAX_DIST && buildingsOn ? Math.max(4, d * 0.004) : Math.max(6, d * 0.0035);
     }
     for (let yy = 0; yy < ymax; yy++) {
       skyColor((cy - yy) / f + tp, col);
@@ -396,7 +396,7 @@ function maxTanAlong(az, dist, h0) {
   const sa = Math.sin(az * DEG), ca = Math.cos(az * DEG);
   const B = [E[0] * sa + N[0] * ca, E[1] * sa + N[1] * ca, E[2] * sa + N[2] * ca];
   let maxT = -Infinity;
-  for (let d = 15; d < dist * 0.97; d += d < BUILDING_MAX_DIST && buildingsOn ? Math.max(3, d * 0.003) : Math.max(6, d * 0.004)) {
+  for (let d = 15; d < dist * 0.97; d += d < BUILDING_MAX_DIST && buildingsOn ? Math.max(4, d * 0.004) : Math.max(6, d * 0.004)) {
     const del = d / R, cd = Math.cos(del), sd = Math.sin(del);
     const x = A[0] * cd + B[0] * sd, y = A[1] * cd + B[1] * sd, z = A[2] * cd + B[2] * sd;
     const mx = (Math.atan2(y, x) / Math.PI + 1) / 2;

@@ -175,7 +175,7 @@ function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   cssW = window.innerWidth; cssH = window.innerHeight;
   for (const c of [scene, overlay]) { c.width = Math.round(cssW * dpr); c.height = Math.round(cssH * dpr); }
-  requestRender();
+  invalidate();
 }
 window.addEventListener('resize', resize);
 
@@ -190,33 +190,60 @@ function unproject(x, y) {
   return { az: (state.heading + (x - cssW / 2) / f / DEG + 360) % 360, tanAlt: (cssH / 2 - y) / f + Math.tan(state.pitch * DEG) };
 }
 
+// 画面より広い範囲（横 2.4 倍・縦 1.6 倍）を描いておき、パン操作は描画済みの画像をずらすだけにする。
+// 描画済み範囲からはみ出したとき・拡大して粗くなったとき・視点が変わったときだけ描き直す。
+const MARGIN_X = 2.4, MARGIN_Y = 1.6;
+let sceneVersion = 0; // 視点の高さ・積雪・建物など、景色そのものが変わったら増やす
+function invalidate() { sceneVersion++; requestRender(); }
+const fullQuality = () => Math.min(dpr, cssW < 700 ? 1.25 : 1.5);
+const lowQuality = () => Math.min(dpr, 1) * 0.5;
+
+function needsRender(final) {
+  const p = imgParams;
+  if (!p || p.version !== sceneVersion) return true;
+  // 描画済み範囲に今の視野が収まっているか
+  const fNow = focal(); // CSS px / rad
+  if (Math.abs(wrap180(p.heading - state.heading)) + state.fov / 2 > p.fov / 2 + 0.01) return true;
+  const fImg = p.width / (p.fov * DEG); // 画像 px / rad
+  const tImg = Math.tan(p.pitch * DEG), tNow = Math.tan(state.pitch * DEG);
+  const hImg = (p.height / 2) / fImg, hNow = (cssH / 2) / fNow;
+  if (tNow + hNow > tImg + hImg + 1e-4 || tNow - hNow < tImg - hImg - 1e-4) return true;
+  // 解像度: 操作中は粗すぎなければよい、止まったら本来の解像度で
+  const ratio = fImg / (fNow * (final ? fullQuality() : lowQuality()));
+  if (final) return ratio < 0.92 || ratio > 2.2;
+  return ratio < 0.5;
+}
+
 function requestRender() {
-  dirty = true;
-  if (!rendering) sendRender();
   draw();
+  if (!state.obs || !cssW) return;
+  if (needsRender(!interacting)) {
+    dirty = true;
+    if (!rendering) sendRender();
+  }
 }
 function sendRender() {
   if (!state.obs || !cssW) return;
   dirty = false;
   rendering = true;
   // 操作中は低解像度、止まったら高解像度
-  const q = interacting ? Math.min(dpr, 1) * 0.55 : Math.min(dpr, 1.5);
+  const q = interacting ? lowQuality() : fullQuality();
   worker.postMessage({
-    type: 'render', id: ++reqId,
-    heading: state.heading, pitch: state.pitch, fov: state.fov * 1.15, // 余白を少し付けて描く
-    width: Math.round(cssW * 1.15 * q), height: Math.round(cssH * 1.15 * q),
+    type: 'render', id: ++reqId, version: sceneVersion,
+    heading: state.heading, pitch: state.pitch, fov: Math.min(359, state.fov * MARGIN_X),
+    width: Math.round(cssW * Math.min(359 / state.fov, MARGIN_X) * q), height: Math.round(cssH * MARGIN_Y * q),
     h0: h0(), snowline: snowline(),
   });
 }
 function onRendered(m) {
   window.__lastRenderMs = m.ms;
+  window.__renderCount = (window.__renderCount || 0) + 1;
   rendering = false;
   imgCanvas.width = m.img.width; imgCanvas.height = m.img.height;
   ictx.putImageData(m.img, 0, 0);
   imgParams = m.params;
   draw();
-  if (dirty) sendRender();
-  else if (!interacting && m.params.width < cssW * 1.15 * Math.min(dpr, 1.5) - 2) { dirty = true; sendRender(); }
+  if (dirty || needsRender(!interacting)) sendRender();
 }
 
 function draw() {
@@ -423,7 +450,7 @@ function changeHeight(dir) {
   const n = Math.max(0, Math.min(HEIGHTS.length - 1, state.hIdx + dir));
   if (n === state.hIdx) return;
   state.hIdx = n;
-  requestRender();
+  invalidate();
   clearTimeout(peaksTimer);
   peaksTimer = setTimeout(refreshPeaks, 250);
 }
@@ -733,10 +760,10 @@ $('search').addEventListener('change', (e) => {
 $('peak-list').innerHTML = MOUNTAINS.map((m) => `<option value="${uniqueName(m)}">${m.yomi} ${m.elev}m</option>`).join('');
 $('peak-count').textContent = MOUNTAINS.length;
 $('opt-source').addEventListener('change', () => initWorker());
-$('opt-snow').addEventListener('change', () => requestRender());
+$('opt-snow').addEventListener('change', () => invalidate());
 $('opt-buildings').addEventListener('change', () => {
   worker.postMessage({ type: 'options', buildings: $('opt-buildings').checked });
-  if (state.obs) { requestRender(); refreshPeaks(); }
+  if (state.obs) { invalidate(); refreshPeaks(); }
 });
 resize();
 window.__yama = state; // デバッグ用
