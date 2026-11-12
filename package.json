@@ -1,0 +1,27 @@
+{
+  "name": "yama",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "data:mountains": "node scripts/validate-mountains.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techgymjp/yama.git"
+  },
+  "bugs": {
+    "url": "https://github.com/techgymjp/yama/issues"
+  },
+  "homepage": "https://github.com/techgymjp/yama#readme",
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0",
+    "vite": "^8.3.8"
+  },
+  "private": true,
+  "type": "module"
+}

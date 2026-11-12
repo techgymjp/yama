@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1d3557" />
+  <title>山探し</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <!-- 景色 -->
+  <div id="view">
+    <canvas id="scene"></canvas>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <!-- 上部: お題 -->
+  <div id="topbar" class="hidden">
+    <div id="quest"><span id="quest-name">—</span><span id="quest-suffix">を探して！</span></div>
+    <div id="quest-sub"></div>
+  </div>
+
+  <!-- 右上: コンパス -->
+  <div id="compass" class="hidden" title="方角">
+    <svg viewBox="-50 -50 100 100" aria-hidden="true">
+      <circle r="46" class="ring" />
+      <g id="compass-dial">
+        <text y="-31" class="n">N</text><text x="33" y="5">E</text><text y="40">S</text><text x="-33" y="5">W</text>
+        <path d="M0,-24 L6,0 L0,4 L-6,0Z" class="needle-n" />
+        <path d="M0,24 L6,0 L0,-4 L-6,0Z" class="needle-s" />
+      </g>
+      <path id="compass-fov" class="fov" d="" />
+      <path d="M0,-50 L4,-43 L-4,-43Z" class="marker" />
+    </svg>
+    <div id="compass-label">N 0°</div>
+  </div>
+
+  <!-- 右側: 高さ調整 -->
+  <div id="height-ctrl" class="hidden">
+    <button id="btn-up" aria-label="上へ">▲</button>
+    <div id="height-label">+0m</div>
+    <button id="btn-down" aria-label="下へ">▼</button>
+  </div>
+
+  <!-- 下部ツールバー -->
+  <div id="toolbar" class="hidden">
+    <button id="btn-hint">ヒント</button>
+    <button id="btn-skip">パス</button>
+    <button id="btn-labels">山名</button>
+    <button id="btn-place">地点</button>
+    <div id="score">正解 0</div>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- スタート画面 -->
+  <div id="start" class="panel">
+    <div class="start-inner">
+      <h1>山探し</h1>
+      <p class="lead">目の前に広がる景色から、お題の山を探してタップ！<br>日本の主要な山 <span id="peak-count"></span> 座の標高・地形データから、その場所から見える景色を再現します。</p>
+      <button id="btn-start" class="primary">現在地でスタート</button>
+      <button id="btn-start-place" class="secondary">地点を選んでスタート</button>
+      <p class="note">スタートを押した時に端末が向いている方角から始まります。<br>2本指ドラッグで方角・角度、ピンチでズーム、▲▼で高さを変えられます。</p>
+      <details class="settings">
+        <summary>設定</summary>
+        <label>標高データ
+          <select id="opt-source">
+            <option value="gsi">国土地理院 標高タイル</option>
+            <option value="terrarium">AWS Terrain Tiles</option>
+          </select>
+        </label>
+        <label>積雪
+          <select id="opt-snow">
+            <option value="auto">季節に合わせる</option>
+            <option value="0">なし</option>
+            <option value="2600">山頂付近</option>
+            <option value="1800">冬山</option>
+          </select>
+        </label>
+      </details>
+    </div>
+  </div>
+
+  <!-- 地点選択 -->
+  <div id="picker" class="panel hidden">
+    <div class="picker-head">
+      <input id="search" list="peak-list" placeholder="山の名前で山頂へ（例: 富士山）" />
+      <datalist id="peak-list"></datalist>
+      <button id="btn-here" title="現在地">現在地</button>
+    </div>
+    <div id="map"></div>
+    <div class="picker-foot">
+      <span id="picker-info">地図をタップして地点を選択</span>
+      <button id="btn-picker-cancel" class="secondary">戻る</button>
+      <button id="btn-picker-ok" class="primary" disabled>この地点で見る</button>
+    </div>
+  </div>
+
+  <!-- 読み込み -->
+  <div id="loading" class="hidden">
+    <div class="loading-box">
+      <div id="loading-text">地形データを読み込み中…</div>
+      <div class="bar"><div id="loading-bar"></div></div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
