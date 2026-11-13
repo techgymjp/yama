@@ -88,7 +88,7 @@ const DICT = {
     'dirs': '北,北北東,北東,東北東,東,東南東,南東,南南東,南,南南西,南西,西南西,西,西北西,北西,北北西',
   },
   en: {
-    'app.title': 'Yama Sagashi',
+    'app.title': 'Peak Finder',
     'start.tagline': 'Find the mountain<br class="br-land"> in the view and tap it!',
     'start.current': 'Start here',
     'start.place': 'Pick a place',
@@ -148,7 +148,7 @@ const DICT = {
     'title.0': 'Mountain Master', 'title.1': 'Mountain Expert', 'title.2': 'Mountain Lover', 'title.3': 'Hiker', 'title.4': 'Beginner Hiker',
     'result.share': 'Share result', 'result.shareX': 'Share on X', 'result.shareLine': 'Send with LINE', 'result.copy': 'Copy',
     'result.again': 'Play again (same place)', 'result.place': 'New place', 'result.view': 'See the view', 'result.top': 'Top',
-    'share.text': 'I scored {pts} pts ({title}) on Yama Sagashi [{level}]! {correct}/{total} correct{place}, time {time}{retries} #YamaSagashi',
+    'share.text': 'I scored {pts} pts ({title}) on Peak Finder [{level}]! {correct}/{total} correct{place}, time {time}{retries} #PeakFinder',
     'share.place': ' from {name}', 'share.retries': ', {n} retries', 'share.dialog': 'Share result', 'share.copied': 'Result copied',
     'time.s': '{s}s', 'time.ms': '{m}m {s}s',
     'follow.on': 'Compass on: the view follows the direction your phone points', 'follow.off': 'Compass off',
