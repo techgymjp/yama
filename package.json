@@ -1,11 +1,30 @@
 {
   "name": "yama",
   "version": "1.0.0",
+  "private": true,
+  "description": "山探し 景色から山を当てるゲーム（Web / Android）",
+  "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build-web.js",
+    "build:app": "node scripts/build-web.js --app",
     "preview": "vite preview",
+    "android:sync": "npm run build:app && npx cap sync android",
+    "android:open": "npx cap open android",
     "data:mountains": "node scripts/validate-mountains.mjs && node scripts/build-mountains.mjs"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^8.2.1",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/share": "8.0.3",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "pngjs": "^7.0.0",
+    "vite": "^8.3.8"
   },
   "repository": {
     "type": "git",
@@ -14,14 +33,5 @@
   "bugs": {
     "url": "https://github.com/techgymjp/yama/issues"
   },
-  "homepage": "https://github.com/techgymjp/yama#readme",
-  "dependencies": {
-    "leaflet": "^1.9.4"
-  },
-  "devDependencies": {
-    "pngjs": "^7.0.0",
-    "vite": "^8.3.8"
-  },
-  "private": true,
-  "type": "module"
+  "homepage": "https://github.com/techgymjp/yama#readme"
 }

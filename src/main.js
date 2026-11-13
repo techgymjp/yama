@@ -4,6 +4,7 @@ import MOUNTAINS from './data/mountains.json';
 import STRUCTURES from './data/structures.json';
 import OBSERVATORIES from './data/observatories.json';
 import { createBgm } from './bgm.js';
+import { Ads } from './ads.js';
 
 // ---------------- サウンド（BGM・効果音） ----------------
 const audio = createBgm();
@@ -71,6 +72,7 @@ const state = {
   heading: 0, pitch: 2, fov: 60,
   peaks: [],            // 見える/見えない判定付き
   showLabels: false,
+  paused: false, pausedAt: 0,
   game: { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false, qStart: 0, totalMs: 0 },
   found: null,          // { peak, until }
   tapMark: null,
@@ -312,8 +314,12 @@ function onRendered(m) {
     draw();
     return;
   }
+  // web-only:start（撮影・テスト用のフック。アプリには入れない）
   window.__lastRenderMs = m.ms;
+  // web-only:end
+  // web-only:start（撮影・テスト用のフック。アプリには入れない）
   window.__renderCount = (window.__renderCount || 0) + 1;
+  // web-only:end
   rendering = false;
   imgCanvas.width = m.img.width; imgCanvas.height = m.img.height;
   ictx.putImageData(m.img, 0, 0);
@@ -653,7 +659,7 @@ function autoFrame() {
 }
 
 function resetGame() {
-  Object.assign(state.game, { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false, qStart: 0, totalMs: 0 });
+  Object.assign(state.game, { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false, qStart: 0, totalMs: 0, retries: 0, preRevealView: null });
   $('result').classList.add('hidden');
   updateScore();
 }
@@ -662,10 +668,12 @@ const fmtTime = (ms) => {
   const t = ms / 1000;
   return t < 60 ? `${t.toFixed(1)}秒` : `${Math.floor(t / 60)}分${(t % 60).toFixed(1).padStart(4, '0')}秒`;
 };
-const questionRunning = () => { const g = state.game; return g.target && !g.waiting && !g.finished && !g.revealed && g.qStart; };
+const questionRunning = () => { const g = state.game; return g.target && !g.waiting && !g.finished && !g.revealed && g.qStart && !state.paused; };
 function elapsedMs() {
   const g = state.game;
-  return g.totalMs + (questionRunning() ? performance.now() - g.qStart : 0);
+  const now = state.paused ? state.pausedAt : performance.now();
+  const running = g.target && !g.waiting && !g.finished && !g.revealed && g.qStart;
+  return g.totalMs + (running ? now - g.qStart : 0);
 }
 function stopQuestionTimer() {
   const g = state.game;
@@ -781,7 +789,9 @@ function showResult() {
   $('result-title').textContent = title;
   $('result-score').textContent = `${g.points}点`;
   $('result-detail').textContent = `難易度「${diff().label}」・${TOTAL_QUESTIONS}問中 ${g.correct}問正解（${max}点満点）`;
-  $('result-time').textContent = `タイム ${fmtTime(g.totalMs)}`;
+  $('result-time').textContent = `タイム ${fmtTime(g.totalMs)}${g.retries ? `・やり直し ${g.retries}回` : ''}`;
+  const isBest = saveBest(g.points, g.totalMs);
+  $('result-best').textContent = isBest ? `ベスト更新！（${diff().label}）` : bestText();
   $('result-list').innerHTML = g.history.map((h, i) =>
     `<li><span>第${i + 1}問 ${h.name}</span><span class="t">${fmtTime(h.ms)}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? `○ ${h.pts}点` : '× パス'}</span></li>`).join('');
   updateScore();
@@ -808,11 +818,16 @@ const SHARE_URL = 'https://techgym.jp/column/claude-code-game-yama/';
 function shareText() {
   const g = state.game;
   const place = state.obs && state.obs.name && !['現在地', '選択地点'].includes(state.obs.name) ? `${state.obs.name}から` : '';
-  return `山探し【${diff().label}】で${g.points}点（${$('result-title').textContent}）！${place}${TOTAL_QUESTIONS}問中${g.correct}問正解・タイム${fmtTime(g.totalMs)} #山探し`;
+  return `山探し【${diff().label}】で${g.points}点（${$('result-title').textContent}）！${place}${TOTAL_QUESTIONS}問中${g.correct}問正解・タイム${fmtTime(g.totalMs)}${g.retries ? `・やり直し${g.retries}回` : ''} #山探し`;
 }
 function openShare(url) { window.open(url, '_blank', 'noopener'); }
 $('btn-share').addEventListener('click', async () => {
   const text = shareText();
+  const nativeShare = plugin('Share');
+  if (nativeShare) {
+    try { await nativeShare.share({ title: '山探し', text, url: SHARE_URL, dialogTitle: '結果をシェア' }); } catch { /* キャンセル */ }
+    return;
+  }
   if (navigator.share) {
     try { await navigator.share({ title: '山探し', text, url: SHARE_URL }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   }
@@ -835,8 +850,9 @@ $('btn-share-copy').addEventListener('click', async () => {
   toast('結果をコピーしました', 'good', 1800);
 });
 
-$('btn-again').addEventListener('click', () => { sfx('start'); resetGame(); nextQuest(); });
+$('btn-again').addEventListener('click', async () => { sfx('start'); await interstitial(); resetGame(); nextQuest(); });
 $('btn-result-place').addEventListener('click', () => { $('result').classList.add('hidden'); openPicker(); });
+$('btn-result-top').addEventListener('click', () => goTop());
 $('btn-result-view').addEventListener('click', () => { $('result').classList.add('hidden'); state.showLabels = true; $('btn-labels').classList.add('on'); draw(); });
 
 $('btn-hint').addEventListener('click', () => { showHint(); });
@@ -847,6 +863,7 @@ $('btn-skip').addEventListener('click', () => {
   if (!g.target) { nextQuest(); return; }
   g.revealed = true;
   g.waiting = true;
+  g.preRevealView = { heading: state.heading, pitch: state.pitch };
   g.history.push({ name: g.target.name, ok: false, pts: 0, ms: stopQuestionTimer() });
   updateScore();
   sfx('reveal');
@@ -854,7 +871,9 @@ $('btn-skip').addEventListener('click', () => {
   $('quest-sub').textContent = `正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`;
   // 山頂が画面の中央やや下（上から55%）に来るように向ける（ズームに関係なく収まる）
   animateTo(g.target.az, Math.atan(g.target.tanAlt + 0.05 * cssH / focal()) / DEG);
-  setTimeout(nextQuest, 3200);
+  // アプリでは、答えを見届けてから「広告を見てもう一度挑戦」を提案する（1 ゲーム 3 回まで）
+  if (Ads.canReward && g.retries < MAX_RETRIES) setTimeout(offerRetry, 2600);
+  else setTimeout(nextQuest, 3200);
 });
 $('btn-labels').addEventListener('click', () => {
   state.showLabels = !state.showLabels;
@@ -889,6 +908,138 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.matches('select, input[type="checkbox"], #search')) sfx('tap');
 }, true);
+// ---------------- アプリ（Android）対応・画面の流れ ----------------
+// Android アプリ（Capacitor）で動いているか。Web 版では Capacitor がないので何もしない
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const plugin = (name) => (NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins[name] : null);
+const MAX_RETRIES = 3;
+Ads.hooks.pause = () => audio.suspend();
+Ads.hooks.resume = () => { if (!document.hidden) audio.resume(); };
+// 全画面広告（プレイ開始・トップに戻る・再開・もう一度 のたび）。読み込めていなければ最大 1.5 秒だけ待つ
+const interstitial = () => Ads.showInterstitial(1500);
+if (NATIVE) document.documentElement.classList.add('native');
+// バナーを出す画面では、下のボタンが隠れないよう余白をとる
+if (Ads.available) document.documentElement.style.setProperty('--banner-h', '56px');
+
+const isShown = (id) => !$(id).classList.contains('hidden');
+const playing = () => !!state.obs && !['start', 'howto', 'picker', 'result', 'loading'].some(isShown);
+
+// バナーはトップ・あそびかた・ポーズ・結果画面だけ（プレイ中は操作ボタンと重なるので出さない）
+function updateBanner() {
+  Ads.setBanner(['start', 'howto', 'pause', 'result'].some(isShown) && !isShown('picker') && !isShown('loading'));
+}
+new MutationObserver(updateBanner).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+updateBanner();
+
+// トップ画面へ（あそびかた・ポーズ・結果画面から）
+async function goTop() {
+  await interstitial();
+  ['howto', 'pause', 'result', 'picker', 'retry-offer'].forEach((id) => $(id).classList.add('hidden'));
+  state.paused = false;
+  showBest();
+  $('start').classList.remove('hidden');
+}
+
+// 一時停止
+function pauseGame() {
+  if (!playing() || state.paused) return;
+  state.paused = true;
+  state.pausedAt = performance.now();
+  $('pause').classList.remove('hidden');
+}
+async function resumeGame() {
+  if (!state.paused) return;
+  await interstitial();
+  const g = state.game;
+  if (g.qStart) g.qStart += performance.now() - state.pausedAt; // 止めていた時間はタイムに入れない
+  state.paused = false;
+  $('pause').classList.add('hidden');
+  updateScore();
+}
+$('btn-pause').addEventListener('click', () => pauseGame());
+$('btn-resume').addEventListener('click', () => resumeGame());
+$('btn-pause-top').addEventListener('click', () => goTop());
+
+// あそびかた
+$('btn-howto').addEventListener('click', () => { $('howto').classList.remove('hidden'); $('howto').scrollTop = 0; });
+$('btn-howto-back').addEventListener('click', () => goTop());
+
+// ベスト記録（難易度ごと。点数が高い方、同点ならタイムが短い方）
+function loadBest(level = difficulty) {
+  try { return JSON.parse(localStorage.getItem(`yama.best.${level}`) || 'null'); } catch { return null; }
+}
+function saveBest(points, ms) {
+  const b = loadBest();
+  if (b && (b.points > points || (b.points === points && b.ms <= ms))) return false;
+  try { localStorage.setItem(`yama.best.${difficulty}`, JSON.stringify({ points, ms })); } catch { /* 保存できない環境 */ }
+  return true;
+}
+function bestText() {
+  const b = loadBest();
+  return b ? `ベスト（${diff().label}）：${b.points}点・${fmtTime(b.ms)}` : '';
+}
+function showBest() { $('best').textContent = bestText(); }
+document.querySelectorAll('.difficulty button').forEach((b) => b.addEventListener('click', showBest));
+showBest();
+
+// ビルド番号・広告の設定（EU など同意が必要な地域だけ）
+if (window.APP_VERSION && window.APP_VERSION !== 'dev') $('build-info').textContent = window.APP_VERSION;
+Ads.initDone.then(() => { if (Ads.privacyOptionsRequired) $('ad-privacy').classList.remove('hidden'); });
+$('ad-privacy').addEventListener('click', (e) => { e.preventDefault(); Ads.showPrivacyOptions(); });
+
+// リワード広告: パスした問題にもう一度挑戦（答えを見届けてから案内し、数秒で自動的に次へ）
+let retryTimer = 0;
+function offerRetry() {
+  const g = state.game;
+  if (!g.revealed || g.finished) { nextQuest(); return; }
+  $('retry-left').textContent = `（このゲームであと ${MAX_RETRIES - g.retries} 回）`;
+  $('retry-offer').classList.remove('hidden');
+  const bar = $('retry-bar');
+  bar.style.transition = 'none'; bar.style.width = '100%';
+  requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.transition = 'width 5s linear'; bar.style.width = '0%'; }));
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => closeRetry(false), 5000);
+}
+async function closeRetry(watch) {
+  clearTimeout(retryTimer);
+  if ($('retry-offer').classList.contains('hidden')) return;
+  $('retry-offer').classList.add('hidden');
+  if (watch && (await Ads.showRewarded()) === 'rewarded') { retryQuestion(); return; }
+  nextQuest();
+}
+$('btn-retry-ad').addEventListener('click', () => closeRetry(true));
+$('btn-retry-skip').addEventListener('click', () => closeRetry(false));
+// パスをなかったことにして、同じ問題・同じ向きからやり直す
+function retryQuestion() {
+  const g = state.game;
+  const last = g.history.pop();
+  if (last) g.totalMs -= last.ms;
+  Object.assign(g, { misses: 0, hinted: false, revealed: false, waiting: false, retries: g.retries + 1, qStart: performance.now() });
+  if (g.preRevealView) animateTo(g.preRevealView.heading, g.preRevealView.pitch);
+  $('quest-sub').textContent = diff().noYomi ? describe(g.target).replace(`${g.target.yomi}・`, '') : describe(g.target);
+  updateScore();
+  sfx('quest');
+  toast(`もう一度挑戦！（やり直し ${g.retries}回目）`, 'good', 2000);
+  draw();
+}
+
+// Android の戻るボタン: プレイ中は一時停止、トップや結果画面ではアプリを終了
+const AppPlugin = plugin('App');
+if (AppPlugin) {
+  AppPlugin.addListener('backButton', () => {
+    if (Ads.showing) return;
+    if (isShown('retry-offer')) { closeRetry(false); return; }
+    if (isShown('howto')) { goTop(); return; }
+    if (isShown('picker')) { $('btn-picker-cancel').click(); return; }
+    if (isShown('pause')) { resumeGame(); return; }
+    if (isShown('start') || isShown('result')) { AppPlugin.exitApp(); return; }
+    if (playing()) pauseGame();
+  });
+}
+
+// 別のアプリに切り替えたら、自動で一時停止して音も止める
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
 // 画面が隠れたら音を止める
 document.addEventListener('visibilitychange', () => { if (document.hidden) audio.suspend(); else audio.resume(); });
 
@@ -938,7 +1089,9 @@ function onOrientation(e) {
   if (capturePending) { pressHeading = h; capturePending = false; }
 }
 // スタートを押した瞬間の向きを記録する（押した直後に届いた最初の値）
+// web-only:start（撮影・テスト用のフック。アプリには入れない）
 window.__compass = () => ({ deviceHeading, pressHeading, capturePending, listening: !!enableCompass.listening }); // デバッグ用
+// web-only:end
 function markStartHeading() {
   pressHeading = null;
   capturePending = true;
@@ -1038,6 +1191,7 @@ $('btn-start').addEventListener('click', async () => {
   sfx('start');
   initWorker();
   enableCompass();
+  await interstitial();
   try {
     const { lat, lon } = await getPosition();
     if (!inJapan(lat, lon)) { toast('現在地が日本国外のため、地点を選んでください', 'bad', 3500); openPicker(); return; }
@@ -1121,7 +1275,8 @@ $('btn-picker-ok').addEventListener('click', () => {
   markStartHeading();
   sfx('start');
   enableCompass();
-  startAt(picked.lat, picked.lon, { name: picked.name || '選択地点', summit: picked.summit, deck: picked.deck });
+  const p = picked;
+  interstitial().then(() => startAt(p.lat, p.lon, { name: p.name || '選択地点', summit: p.summit, deck: p.deck }));
 });
 $('btn-picker-cancel').addEventListener('click', () => {
   $('picker').classList.add('hidden');
@@ -1167,7 +1322,6 @@ $('btn-start-deck').addEventListener('click', () => {
 
 // datalist
 $('peak-list').innerHTML = MOUNTAINS.map((m) => `<option value="${uniqueName(m)}">${m.yomi} ${m.elev}m</option>`).join('');
-$('peak-count').textContent = MOUNTAINS.length;
 $('opt-source').addEventListener('change', () => initWorker());
 $('opt-snow').addEventListener('change', () => invalidate());
 $('opt-buildings').addEventListener('change', () => {
@@ -1175,4 +1329,6 @@ $('opt-buildings').addEventListener('change', () => {
   if (state.obs) { invalidate(); refreshPeaks(); }
 });
 resize();
+// web-only:start（撮影・テスト用のフック。アプリには入れない）
 window.__yama = state; // デバッグ用
+// web-only:end

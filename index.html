@@ -44,6 +44,7 @@
 
   <!-- 下部ツールバー -->
   <div id="toolbar" class="hidden">
+    <button id="btn-pause" aria-label="一時停止">⏸</button>
     <button id="btn-hint">ヒント</button>
     <button id="btn-skip" data-sfx="none">パス</button>
     <button id="btn-labels" data-sfx="none">山名</button>
@@ -62,6 +63,7 @@
       <div id="result-score">0点</div>
       <div id="result-detail"></div>
       <div id="result-time"></div>
+      <div id="result-best"></div>
       <ol id="result-list"></ol>
       <div class="share-row">
         <button id="btn-share" class="share-main">結果をシェア</button>
@@ -74,26 +76,67 @@
       </div>
       <div class="result-buttons">
         <button id="btn-again" data-sfx="none" class="primary">もう一度（同じ場所）</button>
-        <button id="btn-result-place" class="secondary">場所を変える</button>
-        <button id="btn-result-view" class="secondary">景色を見る</button>
+        <div class="result-row">
+          <button id="btn-result-place" class="secondary">場所を変える</button>
+          <button id="btn-result-view" class="secondary">景色を見る</button>
+          <button id="btn-result-top" class="secondary">トップへ</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- スタート画面 -->
+  <!-- トップ画面 -->
   <div id="start" class="panel">
     <div class="start-inner">
-      <h1>山探し</h1>
-      <p class="lead">目の前に広がる景色から、お題の山を探してタップ！<br>日本百名山・二百名山・三百名山など <span id="peak-count"></span> 座の標高・地形データから、その場所から見える景色を再現します。</p>
-      <div class="difficulty-label">難易度</div>
-      <div class="difficulty" role="group" aria-label="難易度">
-        <button data-level="easy">かんたん</button><button data-level="normal">ふつう</button><button data-level="hard">むずかしい</button>
+      <div class="start-title">
+        <h1>山探し</h1>
+        <p class="tagline">景色の中から<br class="br-land">お題の山を探してタップ！</p>
+        <div id="best" class="best"></div>
       </div>
-      <button id="btn-start" data-sfx="none" class="primary">現在地でスタート</button>
-      <button id="btn-start-place" class="secondary">地点を選んでスタート</button>
-      <button id="btn-start-deck" class="secondary">展望台から見る</button>
-      <p class="note">スタートを押した時に端末が向いている方角から始まります。<br>2本指ドラッグで方角・角度、ピンチでズーム、▲▼で高さを変えられます。</p>
-      <details class="settings">
+      <div class="start-menu">
+        <div class="difficulty" role="group" aria-label="難易度">
+          <button data-level="easy">かんたん</button><button data-level="normal">ふつう</button><button data-level="hard">むずかしい</button>
+        </div>
+        <button id="btn-start" data-sfx="none" class="primary">現在地でスタート</button>
+        <div class="start-row">
+          <button id="btn-start-place" class="secondary">地点を選ぶ</button>
+          <button id="btn-start-deck" class="secondary">展望台から</button>
+          <button id="btn-howto" class="secondary">あそびかた</button>
+        </div>
+      </div>
+    </div>
+    <div class="start-foot">
+      <span id="build-info"></span>
+      <a href="https://techgym.jp/privacy-policy/" target="_blank" rel="noopener">プライバシーポリシー</a>
+      <a href="#" id="ad-privacy" class="hidden">広告の設定</a>
+      <span>地図・標高データ：国土地理院</span>
+    </div>
+  </div>
+
+  <!-- あそびかた -->
+  <div id="howto" class="panel hidden">
+    <div class="howto-inner">
+      <h2>あそびかた</h2>
+      <ol class="howto-list">
+        <li>「現在地でスタート」で、いまいる場所から見える景色が表示されます。押した時にスマホが向いている方角から始まります。「地点を選ぶ」「展望台から」で好きな場所からも遊べます。</li>
+        <li>「<b>富士山</b>を探して！」のようにお題が出ます。景色の中からその山を探してタップ。1問100点、全10問です。</li>
+        <li>はずすと減点。違う山をタップすると「そこは〇〇です」と教えてくれます。ヒントで方角と距離、パスで答えがわかります。</li>
+      </ol>
+      <h3>操作</h3>
+      <ul class="howto-list">
+        <li>左右・上下にドラッグ：見る方角・角度を変える</li>
+        <li>2本指で広げる・つまむ：拡大・縮小</li>
+        <li>右下の ▲▼：その場で視点の高さを上下</li>
+        <li>⏸：一時停止</li>
+      </ul>
+      <h3>難易度</h3>
+      <ul class="howto-list">
+        <li><b>かんたん</b>：有名な山だけ。向きの案内つき</li>
+        <li><b>ふつう</b>：百名山を中心にいろいろな山</li>
+        <li><b>むずかしい</b>：無名の山や遠い山。当たりの範囲がせまい</li>
+      </ul>
+      <h3>設定</h3>
+      <details class="settings" open>
         <summary>設定</summary>
         <label>標高データ
           <select id="opt-source">
@@ -116,6 +159,30 @@
           </select>
         </label>
       </details>
+      <h3>データの出典</h3>
+      <p class="howto-small">標高・地図・空中写真：国土地理院（地理院タイル）／山の一覧：国土地理院「日本の主な山岳標高」を加工して作成。景色はこれらのデータから計算して描いたもので、建物は空中写真から推定した架空のものです。</p>
+      <button id="btn-howto-back" class="primary">トップに戻る</button>
+    </div>
+  </div>
+
+  <!-- 一時停止 -->
+  <div id="pause" class="hidden">
+    <div class="pause-box">
+      <div class="pause-title">一時停止</div>
+      <button id="btn-resume" class="primary">再開</button>
+      <button id="btn-pause-top" class="secondary">トップに戻る</button>
+    </div>
+  </div>
+
+  <!-- リワード: パスした問題にもう一度挑戦 -->
+  <div id="retry-offer" class="hidden">
+    <div class="retry-box">
+      <div class="retry-text">広告を見て、この問題に<b>もう一度挑戦</b>しますか？<span id="retry-left"></span></div>
+      <div class="retry-buttons">
+        <button id="btn-retry-ad" class="primary">広告を見て挑戦</button>
+        <button id="btn-retry-skip" class="secondary">次へ</button>
+      </div>
+      <div class="retry-bar"><div id="retry-bar"></div></div>
     </div>
   </div>
 
@@ -143,6 +210,8 @@
     </div>
   </div>
 
+  <script src="./ads-config.js"></script>
+  <script src="./build-info.js"></script>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

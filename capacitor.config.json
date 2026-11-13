@@ -1,0 +1,8 @@
+{
+  "appId": "jp.techgym.yama",
+  "appName": "山探し",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0f1d2e"
+  }
+}

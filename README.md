@@ -77,13 +77,37 @@
 
 ```bash
 npm install
-npm run dev      # 開発サーバ
-npm run build    # dist/ に静的ファイルを出力
+npm run dev        # 開発サーバ
+npm run build      # Web 版（GitHub Pages）を www/ に出力
+npm run build:app  # Android アプリ用を www/ に出力（Web 版だけの部分を取り除く）
 ```
 
 位置情報とコンパスは HTTPS（または localhost）でのみ動作します。
-`main` ブランチに push すると GitHub Pages にデプロイされるワークフロー（`.github/workflows/pages.yml`）を同梱しています
-（リポジトリの Settings → Pages で Source を「GitHub Actions」にしてください）。
+`main` ブランチに push すると GitHub Pages にデプロイされます（`.github/workflows/pages.yml`）。
+
+## Android アプリ
+
+Capacitor 8 で Android アプリにしています（パッケージ名 `jp.techgym.yama`、横画面専用）。構成は techgymjp/jet-fighter の `docs/ANDROID_PORTING.md` と同じです。
+
+- 動作確認用 APK（デバッグ署名・テスト広告）: リリース画面 https://github.com/techgymjp/yama/releases/tag/android-latest
+  （APK 直接: https://github.com/techgymjp/yama/releases/latest/download/yama.apk）
+
+  ![APK のリリース画面の QR コード](docs/apk-qr.png)
+
+- ビルドは GitHub Actions（`.github/workflows/android.yml`）で行います。既定ブランチのビルドは Release `android-latest` の APK を差し替えます。
+  GitHub Secrets（`ANDROID_KEYSTORE_BASE64` など 4 つ）を登録すると、Google Play 用の署名付き AAB（本番広告）も作ります。
+- 手元で Android Studio を使う場合: `npm run android:sync` → `npm run android:open`
+- 広告（`src/ads.js`）: バナーはトップ・あそびかた・一時停止・結果画面だけ。全画面広告はプレイ開始・トップに戻る・再開・もう一度のたび。
+  リワード広告はパスした問題にもう一度挑戦するとき（1 ゲーム 3 回まで、結果とシェア文に「やり直し N 回」）。
+  本番の広告ユニット ID と AdMob のアプリ ID（`android/app/src/main/res/values/strings.xml`）は、AdMob で作成したら入れます。それまでは本番ビルドで広告を出しません。
+- アプリでは、Android の戻るボタン（プレイ中は一時停止、トップ・結果画面では終了）、Android の共有メニュー、別アプリに切り替えたときの自動一時停止に対応しています。
+- 遊ぶにはインターネット接続が必要です（標高・空中写真のタイルを読み込むため）。
+
+## ライセンス
+
+著作権はテックジム株式会社に帰属します（All rights reserved）。許可なく複製・改変・再配布すること、Web サイトやアプリとして公開・販売すること、名前・アイコン・画像を使用することを禁止します。
+テックジムの受講生が学習目的で複製・改変することは許可しますが、アプリストアでの公開・広告の掲載・販売などの商用利用は禁止です。詳しくは `LICENSE` を見てください。
+地理院タイル・「日本の主な山岳標高」は国土地理院のデータ、Leaflet・Capacitor などはそれぞれのライセンスに従います。
 
 ## データの出典
 

@@ -93,12 +93,67 @@ button.secondary { background: rgba(255,255,255,0.16); }
 #toast.bad { background: rgba(200,60,60,0.92); }
 
 .panel { position: fixed; inset: 0; background: linear-gradient(#1d3557, #0f1d2e); z-index: 10; }
-#start { display: flex; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
-.start-inner { max-width: 420px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 12px; }
-.start-inner h1 { font-size: 52px; margin: 0 0 4px; letter-spacing: 0.1em; }
-.lead { line-height: 1.7; margin: 0 0 8px; }
-.note { font-size: 12px; opacity: 0.75; line-height: 1.7; }
-.start-inner button { padding: 14px; font-size: 17px; }
+/* トップ画面 */
+#start { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 20px calc(16px + var(--banner-h, 0px)); overflow: auto; }
+.start-inner { max-width: 440px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 14px; }
+.start-title h1 { font-size: 64px; margin: 0; letter-spacing: 0.12em; line-height: 1.1; }
+.tagline { font-size: 19px; font-weight: 700; margin: 6px 0 0; line-height: 1.5; }
+.br-land { display: none; }
+.best { margin-top: 8px; font-size: 16px; color: #ffd166; font-weight: 700; min-height: 1.2em; }
+.start-menu { display: flex; flex-direction: column; gap: 10px; }
+.start-menu > button { padding: 16px; font-size: 20px; }
+.start-row { display: flex; gap: 8px; }
+.start-row button { flex: 1; padding: 13px 6px; font-size: 16px; }
+.start-foot { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; font-size: 12px; opacity: 0.75; }
+.start-foot a { color: inherit; }
+/* 横長の画面: 左にタイトル、右にメニュー */
+@media (orientation: landscape) {
+  .start-inner { max-width: 820px; flex-direction: row; align-items: center; gap: 28px; text-align: left; }
+  .start-title { flex: 1; text-align: center; }
+  .start-menu { flex: 1.15; }
+  .br-land { display: inline; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  #start { padding-top: 10px; }
+  .start-title h1 { font-size: 54px; }
+  .tagline { font-size: 17px; }
+  .start-menu > button { padding: 13px; font-size: 19px; }
+  .start-row button { padding: 11px 6px; font-size: 15px; }
+  .start-foot { margin-top: 8px; }
+}
+
+/* あそびかた */
+#howto { overflow: auto; padding: 16px 16px calc(16px + var(--banner-h, 0px)); }
+.howto-inner { max-width: 720px; margin: 0 auto; line-height: 1.7; }
+.howto-inner h2 { margin: 4px 0 8px; font-size: 26px; }
+.howto-inner h3 { margin: 14px 0 4px; font-size: 18px; color: #ffd166; }
+.howto-list { margin: 0; padding-left: 1.4em; font-size: 16px; }
+.howto-small { font-size: 13px; opacity: 0.85; }
+#btn-howto-back { display: block; width: 100%; max-width: 360px; margin: 16px auto 4px; padding: 14px; font-size: 18px; }
+
+/* 一時停止 */
+#pause { position: fixed; inset: 0; z-index: 14; display: flex; align-items: center; justify-content: center; background: rgba(10,20,34,0.7); padding-bottom: var(--banner-h, 0px); }
+.pause-box { background: var(--bg); border-radius: 18px; padding: 20px 24px; width: min(340px, 90vw); display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.pause-title { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+.pause-box button { padding: 14px; font-size: 18px; }
+#btn-pause { font-size: 16px; }
+
+/* リワード（もう一度挑戦）の案内 */
+#retry-offer { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 13; width: min(420px, 92vw); }
+.retry-box { background: rgba(15,29,46,0.95); border: 2px solid #ffd166; border-radius: 16px; padding: 14px 16px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.retry-text { font-size: 16px; line-height: 1.5; }
+#retry-left { display: block; font-size: 13px; opacity: 0.8; }
+.retry-buttons { display: flex; gap: 8px; margin-top: 10px; }
+.retry-buttons button { flex: 1; padding: 11px 6px; font-size: 15px; }
+.retry-bar { height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+#retry-bar { height: 100%; width: 100%; background: #ffd166; }
+
+/* 結果画面: 下のボタン列 */
+.result-row { display: flex; gap: 6px; }
+.result-row button { flex: 1; padding: 11px 4px; font-size: 14px; }
+#result-best { font-size: 15px; font-weight: 700; color: #ffd166; min-height: 0; }
+#result { padding-bottom: calc(16px + var(--banner-h, 0px)); }
+
 .settings { text-align: left; font-size: 14px; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 8px 12px; }
 .settings label { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; gap: 8px; }
 .settings select { font: inherit; padding: 4px; border-radius: 6px; }
@@ -189,7 +244,6 @@ button.secondary { background: rgba(255,255,255,0.16); }
 }
 
 /* 難易度 */
-.difficulty-label { font-size: 13px; opacity: 0.8; margin-bottom: -4px; }
 .difficulty { display: flex; background: rgba(255,255,255,0.1); border-radius: 999px; padding: 4px; gap: 4px; }
 .difficulty button { flex: 1; padding: 10px 6px; font-size: 15px; background: transparent; border-radius: 999px; }
 .difficulty button.on { background: #ffd166; color: #1d2b3a; font-weight: 800; }
