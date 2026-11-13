@@ -105,7 +105,7 @@ Capacitor 8 で Android アプリにしています（パッケージ名 `jp.tec
 - 手元で Android Studio を使う場合: `npm run android:sync` → `npm run android:open`
 - 広告（`src/ads.js`）: バナーはトップ・あそびかた・一時停止・結果画面だけ。全画面広告はプレイ開始・トップに戻る・再開・もう一度のたび。
   リワード広告はパスした問題にもう一度挑戦するとき（1 ゲーム 3 回まで、結果とシェア文に「やり直し N 回」）。
-  本番の広告ユニット ID と AdMob のアプリ ID（`android/app/src/main/res/values/strings.xml`）は、AdMob で作成したら入れます。それまでは本番ビルドで広告を出しません。
+  AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml`、本番の広告ユニット ID は `src/ads.js` にあります。
 - アプリでは、Android の戻るボタン（プレイ中は一時停止、トップ・結果画面では終了）、Android の共有メニュー、別アプリに切り替えたときの自動一時停止に対応しています。
 - 遊ぶにはインターネット接続が必要です（標高・空中写真のタイルを読み込むため）。
 
