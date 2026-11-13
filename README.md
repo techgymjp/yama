@@ -108,6 +108,7 @@ Capacitor 8 で Android アプリにしています（パッケージ名 `jp.tec
   AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml`、本番の広告ユニット ID は `src/ads.js` にあります。
 - アプリでは、Android の戻るボタン（プレイ中は一時停止、トップ・結果画面では終了）、Android の共有メニュー、別アプリに切り替えたときの自動一時停止に対応しています。
 - 遊ぶにはインターネット接続が必要です（標高・空中写真のタイルを読み込むため）。
+- ストアの掲載情報（日本語・英語の紹介文、ASO のメモ）と画像は `docs/store/`。画像は `scripts/store-shots.cjs` で撮り直せます。
 
 ## ライセンス
 
