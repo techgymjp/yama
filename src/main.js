@@ -72,7 +72,7 @@ const state = {
   heading: 0, pitch: 2, fov: 60,
   peaks: [],            // 見える/見えない判定付き
   showLabels: false,
-  paused: false, pausedAt: 0,
+  paused: false, pausedAt: 0, follow: false,
   game: { target: null, misses: 0, hinted: false, revealed: false, recent: [], round: 0, points: 0, correct: 0, history: [], waiting: false, finished: false, qStart: 0, totalMs: 0 },
   found: null,          // { peak, until }
   tapMark: null,
@@ -526,6 +526,7 @@ view.addEventListener('pointermove', (e) => {
     if (gesture.axis === 'zoom') {
       state.fov = gesture.fov * gesture.dist / Math.max(dist, 1);
     } else if (gesture.axis === 'h') {
+      if (state.follow) setFollow(false, 'コンパス追従をオフにしました');
       state.heading = gesture.heading - dx / f / DEG;
     } else if (gesture.axis === 'v') {
       state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + dy / f) / DEG;
@@ -535,6 +536,7 @@ view.addEventListener('pointermove', (e) => {
     // 1本指（マウス）ドラッグでも視点移動
     const dx = p.x - gesture.mx, dy = p.y - gesture.my;
     if (!gesture.axis && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) gesture.axis = axisOf(dx, dy);
+    if (gesture.axis === 'h' && state.follow) setFollow(false, 'コンパス追従をオフにしました');
     if (gesture.axis === 'h') state.heading = gesture.heading - dx / f / DEG;
     else if (gesture.axis === 'v') state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + dy / f) / DEG;
     if (gesture.axis) gesture.moved = true;
@@ -881,7 +883,44 @@ $('btn-labels').addEventListener('click', () => {
   sfx(state.showLabels ? 'toggleOn' : 'toggleOff');
   draw();
 });
-$('btn-place').addEventListener('click', () => { openPicker(); });
+// ---------------- コンパス追従（端末の向きに合わせて景色の方角が動く） ----------------
+function setFollow(on, note = '') {
+  state.follow = on;
+  $('btn-follow').classList.toggle('on', on);
+  $('btn-follow').setAttribute('aria-pressed', String(on));
+  if (note) toast(note, '', 2200);
+  if (on) followLoop();
+}
+$('btn-follow').addEventListener('click', async () => {
+  if (state.follow) { sfx('toggleOff'); setFollow(false); return; }
+  enableCompass();
+  // 向きの値が届くまで少し待つ（届かなければコンパスのない端末）
+  for (let i = 0; i < 15 && deviceHeading === null; i++) await new Promise((r) => setTimeout(r, 100));
+  if (deviceHeading === null) { sfx('wrong'); toast('この端末ではコンパスが使えません', 'bad', 2500); return; }
+  sfx('toggleOn');
+  setFollow(true, 'コンパス追従オン：スマホを向けた方角の景色になります');
+});
+// 毎フレーム、端末の向きへ滑らかに近づける
+let followRaf = 0;
+function followLoop() {
+  if (followRaf) return;
+  const step = () => {
+    followRaf = 0;
+    if (!state.follow) { setInteracting(false); return; }
+    // パスで答えを見せている間は止める（答えの方角へ向けた画面を戻さない）
+    if (deviceHeading !== null && playing() && !state.paused && !state.game.revealed) {
+      const d = wrap180(deviceHeading - state.heading);
+      if (Math.abs(d) > 0.15) {
+        state.heading = (state.heading + d * 0.25 + 360) % 360;
+        setInteracting(true);
+        requestRender();
+        setInteracting(false);
+      }
+    }
+    followRaf = requestAnimationFrame(step);
+  };
+  followRaf = requestAnimationFrame(step);
+}
 // BGM のオン・オフ
 function updateBgmButton() {
   $('btn-bgm').classList.toggle('on', bgmOn);
