@@ -69,6 +69,9 @@
         <button id="btn-share-line" class="share-sub share-line" aria-label="LINEで送る">LINE</button>
         <button id="btn-share-copy" class="share-sub" aria-label="結果をコピー">コピー</button>
       </div>
+      <div class="difficulty difficulty-result" role="group" aria-label="難易度">
+        <button data-level="easy">かんたん</button><button data-level="normal">ふつう</button><button data-level="hard">むずかしい</button>
+      </div>
       <div class="result-buttons">
         <button id="btn-again" data-sfx="none" class="primary">もう一度（同じ場所）</button>
         <button id="btn-result-place" class="secondary">場所を変える</button>
@@ -82,6 +85,10 @@
     <div class="start-inner">
       <h1>山探し</h1>
       <p class="lead">目の前に広がる景色から、お題の山を探してタップ！<br>日本百名山・二百名山・三百名山など <span id="peak-count"></span> 座の標高・地形データから、その場所から見える景色を再現します。</p>
+      <div class="difficulty-label">難易度</div>
+      <div class="difficulty" role="group" aria-label="難易度">
+        <button data-level="easy">かんたん</button><button data-level="normal">ふつう</button><button data-level="hard">むずかしい</button>
+      </div>
       <button id="btn-start" data-sfx="none" class="primary">現在地でスタート</button>
       <button id="btn-start-place" class="secondary">地点を選んでスタート</button>
       <button id="btn-start-deck" class="secondary">展望台から見る</button>

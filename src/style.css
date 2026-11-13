@@ -187,3 +187,11 @@ button.secondary { background: rgba(255,255,255,0.16); }
   #picker-info { flex: 1 1 auto; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .picker-foot button { flex: 0 0 auto; padding: 8px 16px; font-size: 14px; }
 }
+
+/* 難易度 */
+.difficulty-label { font-size: 13px; opacity: 0.8; margin-bottom: -4px; }
+.difficulty { display: flex; background: rgba(255,255,255,0.1); border-radius: 999px; padding: 4px; gap: 4px; }
+.difficulty button { flex: 1; padding: 10px 6px; font-size: 15px; background: transparent; border-radius: 999px; }
+.difficulty button.on { background: #ffd166; color: #1d2b3a; font-weight: 800; }
+.difficulty-result { margin-bottom: 8px; }
+.difficulty-result button { padding: 8px 6px; font-size: 14px; }

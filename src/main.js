@@ -10,6 +10,8 @@ const audio = createBgm();
 const pref = (k, def) => { try { const v = localStorage.getItem(k); return v === null ? def : v === '1'; } catch { return def; } };
 const savePref = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* 保存できない環境 */ } };
 let bgmOn = pref('yama.bgm', true);
+let difficulty = (() => { try { const v = localStorage.getItem('yama.difficulty'); return DIFFICULTY[v] ? v : 'normal'; } catch { return 'normal'; } })();
+const diff = () => DIFFICULTY[difficulty];
 let sfxOn = pref('yama.sfx', true);
 const sfx = (name) => { if (sfxOn) audio.sfx(name); };
 
@@ -54,6 +56,12 @@ function describe(p) {
   return parts.join('・');
 }
 const TOTAL_QUESTIONS = 10;
+// 難易度
+const DIFFICULTY = {
+  easy: { label: 'かんたん', maxDist: 150000, tol: 1.5, miss: 10, hint: 0, guide: true, famousOnly: true },
+  normal: { label: 'ふつう', maxDist: 260000, tol: 1.0, miss: 20, hint: 30, guide: false, famousOnly: false },
+  hard: { label: 'むずかしい', maxDist: 300000, tol: 0.7, miss: 25, hint: 50, guide: false, famousOnly: false, obscure: true, noYomi: true },
+};
 const HEIGHTS = [1.6, 5, 10, 20, 30, 50, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000];
 
 // ---------------- 状態 ----------------
@@ -367,7 +375,7 @@ function drawOverlay() {
   if (g.revealed && g.target) drawLabels([g.target], '#ffd166', true);
 
   // ヒント: 画面外なら「どちらへ何度回るか」をバッジで示す
-  if (g.hinted && g.target && !g.revealed) {
+  if ((g.hinted || diff().guide) && g.target && !g.revealed) {
     const pt = project(g.target.az, g.target.tanAlt);
     if (pt.x < 0 || pt.x > cssW) drawHintBadge(wrap180(g.target.az - state.heading));
     else {
@@ -677,7 +685,13 @@ function nextQuest() {
   g.waiting = false;
   if (g.finished) return;
   if (g.round >= TOTAL_QUESTIONS) { showResult(); return; }
-  const cands = state.peaks.filter((p) => p.visible && !p.here && p.dist > 800 && p.dist < 260000);
+  const D = diff();
+  let cands = state.peaks.filter((p) => p.visible && !p.here && p.dist > 800 && p.dist < D.maxDist);
+  if (D.famousOnly) {
+    // かんたん: 有名な山・展望台のある建物だけ（少なすぎる場所では、ふつうと同じ候補）
+    const famous = cands.filter((p) => p.cls === 100 || p.name === '富士山' || (p.structure && STRUCT_DECKS[p.name]));
+    if (famous.length >= 3) cands = famous;
+  }
   const pool = cands.filter((p) => !g.recent.includes(p.name));
   const list = pool.length ? pool : cands;
   Object.assign(g, { misses: 0, hinted: false, revealed: false, target: null });
@@ -689,7 +703,10 @@ function nextQuest() {
     return;
   }
   // 百名山・富士山・目立つ山を出やすく
-  const weight = (p) => (p.name === '富士山' ? 6 : 1) * (p.structure ? (STRUCT_DECKS[p.name] ? 12 : 8) : [1, 3, 5, 10][rank(p)]) * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
+  const weight = (p) => (D.obscure
+    // むずかしい: 無名の山・遠い山ほど出やすく
+    ? (p.structure ? 2 : [4, 2.5, 1.5, 1][rank(p)]) * (1 + Math.min(2, p.dist / 100000))
+    : (p.name === '富士山' ? 6 : 1) * (p.structure ? (STRUCT_DECKS[p.name] ? 12 : 8) : [1, 3, 5, 10][rank(p)]) * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40)));
   let r = Math.random() * list.reduce((s, p) => s + weight(p), 0);
   let pick = list[0];
   for (const p of list) { r -= weight(p); if (r <= 0) { pick = p; break; } }
@@ -701,7 +718,7 @@ function nextQuest() {
   $('quest-name').textContent = pick.name;
   $('quest-suffix').textContent = `を探して！（第${g.round}問）`;
   sfx('quest');
-  $('quest-sub').textContent = describe(pick);
+  $('quest-sub').textContent = D.noYomi ? describe(pick).replace(`${pick.yomi}・`, '') : describe(pick);
   draw();
 }
 
@@ -710,11 +727,12 @@ function onTap(x, y) {
   if (!g.target || g.revealed) return;
   const { az, tanAlt } = unproject(x, y);
   const t = project(g.target.az, g.target.tanAlt);
-  const tolX = Math.max(26, focal() * 1.0 * DEG);
-  const hit = Math.abs(x - t.x) <= tolX && y >= t.y - 45 && y <= t.y + Math.max(60, focal() * 2 * DEG);
+  const D = diff();
+  const tolX = Math.max(26 * D.tol, focal() * 1.0 * DEG * D.tol);
+  const hit = Math.abs(x - t.x) <= tolX && y >= t.y - 45 * D.tol && y <= t.y + Math.max(60, focal() * 2 * DEG) * D.tol;
   state.tapMark = { az, tanAlt, ok: hit, until: performance.now() + 1200 };
   if (hit) {
-    const pts = Math.max(10, 100 - g.misses * 20 - (g.hinted ? 30 : 0));
+    const pts = Math.max(10, 100 - g.misses * D.miss - (g.hinted ? D.hint : 0));
     const ms = stopQuestionTimer();
     g.correct++;
     g.points += pts;
@@ -762,7 +780,7 @@ function showResult() {
   const title = rate >= 0.9 ? '山の達人' : rate >= 0.7 ? '山の上級者' : rate >= 0.45 ? '山好き' : rate >= 0.2 ? 'ハイカー' : '山歩きビギナー';
   $('result-title').textContent = title;
   $('result-score').textContent = `${g.points}点`;
-  $('result-detail').textContent = `${TOTAL_QUESTIONS}問中 ${g.correct}問正解（${max}点満点）`;
+  $('result-detail').textContent = `難易度「${diff().label}」・${TOTAL_QUESTIONS}問中 ${g.correct}問正解（${max}点満点）`;
   $('result-time').textContent = `タイム ${fmtTime(g.totalMs)}`;
   $('result-list').innerHTML = g.history.map((h, i) =>
     `<li><span>第${i + 1}問 ${h.name}</span><span class="t">${fmtTime(h.ms)}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? `○ ${h.pts}点` : '× パス'}</span></li>`).join('');
@@ -774,12 +792,23 @@ function showResult() {
   $('quest-sub').textContent = '';
   draw();
 }
+// ---------------- 難易度の選択（開始画面・結果画面） ----------------
+function updateDifficultyButtons() {
+  document.querySelectorAll('.difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.level === difficulty));
+}
+document.querySelectorAll('.difficulty button').forEach((b) => b.addEventListener('click', () => {
+  difficulty = b.dataset.level;
+  try { localStorage.setItem('yama.difficulty', difficulty); } catch { /* 保存できない環境 */ }
+  updateDifficultyButtons();
+}));
+updateDifficultyButtons();
+
 // ---------------- シェア ----------------
 const SHARE_URL = 'https://techgym.jp/column/claude-code-game-yama/';
 function shareText() {
   const g = state.game;
   const place = state.obs && state.obs.name && !['現在地', '選択地点'].includes(state.obs.name) ? `${state.obs.name}から` : '';
-  return `山探しで${g.points}点（${$('result-title').textContent}）！${place}${TOTAL_QUESTIONS}問中${g.correct}問正解・タイム${fmtTime(g.totalMs)} #山探し`;
+  return `山探し【${diff().label}】で${g.points}点（${$('result-title').textContent}）！${place}${TOTAL_QUESTIONS}問中${g.correct}問正解・タイム${fmtTime(g.totalMs)} #山探し`;
 }
 function openShare(url) { window.open(url, '_blank', 'noopener'); }
 $('btn-share').addEventListener('click', async () => {
