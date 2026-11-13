@@ -4,6 +4,6 @@
     <string name="title_activity_main">山探し</string>
     <string name="package_name">jp.techgym.yama</string>
     <string name="custom_url_scheme">jp.techgym.yama</string>
-    <!-- AdMob のアプリ ID。本番の ID が届くまでは Google 公式のテスト用アプリ ID -->
-    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
+    <!-- AdMob のアプリ ID（AdMob の Android アプリ「山探し」） -->
+    <string name="admob_app_id">ca-app-pub-6411535997477460~6284269831</string>
 </resources>
