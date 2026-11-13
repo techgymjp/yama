@@ -26,8 +26,26 @@ const rank = (p) => RANK[p.cls] || 0;
 const NAME_COUNT = {};
 for (const m of MOUNTAINS) NAME_COUNT[m.name] = (NAME_COUNT[m.name] || 0) + 1;
 const uniqueName = (m) => (NAME_COUNT[m.name] > 1 && m.pref ? `${m.name}（${m.pref}）` : m.name);
+// 構造物ごとの展望台（同じ位置にある展望台）
+const STRUCT_DECKS = {};
+for (const st of STRUCTURES) {
+  const decks = OBSERVATORIES.filter((o) => Math.hypot((o.lat - st.lat) * 111320, (o.lon - st.lon) * 111320 * Math.cos(st.lat * DEG)) < 150);
+  if (decks.length) STRUCT_DECKS[st.name] = decks;
+}
+// 展望台の名前から建物名を除いた部分（例: 東京スカイツリー 天望回廊 → 天望回廊）
+const deckShort = (d, struct) => {
+  const n = d.name.replace(/（.*?）/g, '');
+  const sp = n.indexOf(' ');
+  // 「建物名 展望台名」の形なら展望台名だけ、それ以外（SHIBUYA SKY など）はそのまま
+  return sp > 0 && struct.startsWith(n.slice(0, sp)) ? n.slice(sp + 1) : n;
+};
 function describe(p) {
-  if (p.structure) return `${p.yomi}・高さ${p.height}m の構造物`;
+  if (p.structure) {
+    const decks = STRUCT_DECKS[p.name];
+    return decks
+      ? `${p.yomi}・高さ${p.height}m・展望台：${decks.map((d) => `${deckShort(d, p.name)} ${d.deck}m`).join('・')}`
+      : `${p.yomi}・高さ${p.height}m の構造物`;
+  }
   const parts = [p.yomi];
   if (p.alias || p.group) parts.push([p.alias, p.group].filter(Boolean).join('・'));
   if (p.pref) parts.push(p.pref);
@@ -670,7 +688,7 @@ function nextQuest() {
     return;
   }
   // 百名山・富士山・目立つ山を出やすく
-  const weight = (p) => (p.name === '富士山' ? 6 : 1) * (p.structure ? 8 : [1, 3, 5, 10][rank(p)]) * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
+  const weight = (p) => (p.name === '富士山' ? 6 : 1) * (p.structure ? (STRUCT_DECKS[p.name] ? 12 : 8) : [1, 3, 5, 10][rank(p)]) * (1 + Math.min(3, Math.max(0, p.tanAlt + 0.05) * 40));
   let r = Math.random() * list.reduce((s, p) => s + weight(p), 0);
   let pick = list[0];
   for (const p of list) { r -= weight(p); if (r <= 0) { pick = p; break; } }
@@ -805,8 +823,10 @@ $('btn-skip').addEventListener('click', () => {
   g.history.push({ name: g.target.name, ok: false, pts: 0, ms: stopQuestionTimer() });
   updateScore();
   sfx('reveal');
-  toast(`正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`, '', 3000);
-  animateTo(g.target.az, Math.atan(g.target.tanAlt) / DEG + 3);
+  // 答えは上部のお題の欄に出す（景色の山にメッセージが重ならないように）
+  $('quest-sub').textContent = `正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`;
+  // 山頂が画面の中央やや下（上から55%）に来るように向ける（ズームに関係なく収まる）
+  animateTo(g.target.az, Math.atan(g.target.tanAlt + 0.05 * cssH / focal()) / DEG);
   setTimeout(nextQuest, 3200);
 });
 $('btn-labels').addEventListener('click', () => {
