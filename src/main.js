@@ -971,6 +971,42 @@ function openPicker() {
       L.circleMarker([m.lat, m.lon], { radius: 2 + rank(m) * 0.7, color: ['#6c757d', '#52796f', '#2a6f97', '#c1121f'][rank(m)], weight: 1, fillOpacity: 0.8 })
         .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => pick(m.lat, m.lon, uniqueName(m), m.elev)).addTo(map);
     }
+    // 展望台（同じ建物の展望台は1つの印にまとめ、タップで選ぶ）
+    const deckIcon = L.divIcon({
+      className: 'deck-marker',
+      html: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2l1.2 5h-2.4zM10.6 8h2.8l.9 6h-4.6zM9.4 15h5.2l1.6 7h-2.3l-.9-4h-2l-.9 4H7.8z" fill="#1d2b3a"/></svg>',
+      iconSize: [26, 26], iconAnchor: [13, 13],
+    });
+    const groups = new Map();
+    OBSERVATORIES.forEach((o, i) => {
+      const k = `${o.lat},${o.lon}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(i);
+    });
+    for (const idxs of groups.values()) {
+      const o0 = OBSERVATORIES[idxs[0]];
+      const html = `<div class="deck-popup"><div class="deck-popup-title">展望台から見る</div>${idxs.map((i) =>
+        `<button data-deck="${i}">${OBSERVATORIES[i].name}<span>地上${OBSERVATORIES[i].deck}m</span></button>`).join('')}</div>`;
+      L.marker([o0.lat, o0.lon], { icon: deckIcon, zIndexOffset: 1000, title: idxs.map((i) => OBSERVATORIES[i].name).join(' / ') })
+        .bindPopup(html, { closeButton: true, autoPanPadding: [20, 20] })
+        .addTo(map);
+    }
+    map.on('popupopen', (e) => {
+      e.popup.getElement().querySelectorAll('button[data-deck]').forEach((b) => b.addEventListener('click', () => {
+        selectDeck(+b.dataset.deck);
+        map.closePopup();
+      }));
+    });
+    // 凡例
+    const legend = L.control({ position: 'bottomleft' });
+    legend.onAdd = () => {
+      const d = L.DomUtil.create('div', 'map-legend');
+      d.innerHTML = '<span><i style="background:#c1121f"></i>百名山</span><span><i style="background:#2a6f97"></i>二百名山</span>'
+        + '<span><i style="background:#52796f"></i>三百名山</span><span><i style="background:#6c757d"></i>その他</span>'
+        + '<span><i class="lg-deck"></i>展望台</span>';
+      return d;
+    };
+    legend.addTo(map);
     map.on('click', (e) => pick(e.latlng.lat, e.latlng.lng, '', false));
     if (state.obs) pick(state.obs.lat, state.obs.lon, state.obs.name, false);
   }
@@ -1017,11 +1053,15 @@ $('search').addEventListener('change', (e) => {
   $('deck-select').innerHTML = '<option value="">展望台から見る…</option>' + areas.map((a) =>
     `<optgroup label="${a}">${OBSERVATORIES.map((o, i) => (o.area === a ? `<option value="${i}">${o.name}（${o.deck}m）</option>` : '')).join('')}</optgroup>`).join('');
 }
+function selectDeck(i) {
+  const o = OBSERVATORIES[i];
+  map.setView([o.lat, o.lon], Math.max(map.getZoom(), 13));
+  pick(o.lat, o.lon, o.name, 0, o.deck);
+  $('deck-select').value = String(i);
+}
 $('deck-select').addEventListener('change', (e) => {
   if (e.target.value === '') return;
-  const o = OBSERVATORIES[+e.target.value];
-  map.setView([o.lat, o.lon], 14);
-  pick(o.lat, o.lon, o.name, 0, o.deck);
+  selectDeck(+e.target.value);
 });
 $('btn-start-deck').addEventListener('click', () => {
   audio.unlock(); sfx('click'); initWorker(); enableCompass(); openPicker();
