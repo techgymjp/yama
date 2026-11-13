@@ -2,6 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MOUNTAINS from './data/mountains.json';
 import STRUCTURES from './data/structures.json';
+import OBSERVATORIES from './data/observatories.json';
 import { createBgm } from './bgm.js';
 
 // ---------------- サウンド（BGM・効果音） ----------------
@@ -48,7 +49,8 @@ const state = {
   found: null,          // { peak, until }
   tapMark: null,
 };
-const eyeHeight = () => HEIGHTS[state.hIdx];
+// 展望台から見るときは、その展望台の高さ（HEIGHTS にない値）を使う
+const eyeHeight = () => (state.hOverride != null ? state.hOverride : HEIGHTS[state.hIdx]);
 const h0 = () => (state.obs ? state.obs.ground + eyeHeight() : 0);
 
 function snowline() {
@@ -567,8 +569,17 @@ function bindRepeat(btn, fn) {
 }
 let peaksTimer = 0;
 function changeHeight(dir) {
-  const n = Math.max(0, Math.min(HEIGHTS.length - 1, state.hIdx + dir));
-  if (n === state.hIdx) return;
+  let n;
+  if (state.hOverride != null) {
+    // 展望台の高さから、上（下）の段へ
+    const cur = state.hOverride;
+    n = dir > 0 ? HEIGHTS.findIndex((v) => v > cur) : HEIGHTS.length - 1 - [...HEIGHTS].reverse().findIndex((v) => v < cur);
+    if (n < 0 || n >= HEIGHTS.length) return;
+    state.hOverride = null;
+  } else {
+    n = Math.max(0, Math.min(HEIGHTS.length - 1, state.hIdx + dir));
+    if (n === state.hIdx) return;
+  }
   state.hIdx = n;
   invalidate();
   clearTimeout(peaksTimer);
@@ -743,6 +754,42 @@ function showResult() {
   $('quest-sub').textContent = '';
   draw();
 }
+// ---------------- シェア ----------------
+const SHARE_URL = 'https://techgym.jp/column/claude-code-game-yama/';
+function shareText() {
+  const g = state.game;
+  const place = state.obs && state.obs.name && !['現在地', '選択地点'].includes(state.obs.name) ? `${state.obs.name}から` : '';
+  return `山探しで${g.points}点（${$('result-title').textContent}）！${place}${TOTAL_QUESTIONS}問中${g.correct}問正解・タイム${fmtTime(g.totalMs)} #山探し`;
+}
+function openShare(url) { window.open(url, '_blank', 'noopener'); }
+$('btn-share').addEventListener('click', async () => {
+  sfx('click');
+  const text = shareText();
+  if (navigator.share) {
+    try { await navigator.share({ title: '山探し', text, url: SHARE_URL }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  openShare(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}`);
+});
+$('btn-share-x').addEventListener('click', () => {
+  sfx('click');
+  openShare(`https://x.com/intent/post?text=${encodeURIComponent(shareText())}&url=${encodeURIComponent(SHARE_URL)}`);
+});
+$('btn-share-line').addEventListener('click', () => {
+  sfx('click');
+  openShare(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(shareText())}`);
+});
+$('btn-share-copy').addEventListener('click', async () => {
+  const text = `${shareText()} ${SHARE_URL}`;
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch { /* コピー不可 */ }
+    ta.remove();
+  }
+  sfx('click');
+  toast('結果をコピーしました', 'good', 1800);
+});
+
 $('btn-again').addEventListener('click', () => { sfx('start'); resetGame(); nextQuest(); });
 $('btn-result-place').addEventListener('click', () => { sfx('click'); $('result').classList.add('hidden'); openPicker(); });
 $('btn-result-view').addEventListener('click', () => { $('result').classList.add('hidden'); state.showLabels = true; $('btn-labels').classList.add('on'); draw(); });
@@ -824,7 +871,7 @@ async function readHeading() {
 }
 
 // ---------------- 開始・地点の読み込み ----------------
-async function startAt(lat, lon, { name = '', summit = 0, snapped = false } = {}) {  // summit: 山頂の標高
+async function startAt(lat, lon, { name = '', summit = 0, snapped = false, deck = 0 } = {}) {  // deck: 展望台の高さ  // summit: 山頂の標高
   $('start').classList.add('hidden');
   $('picker').classList.add('hidden');
   $('loading').classList.remove('hidden');
@@ -836,8 +883,9 @@ async function startAt(lat, lon, { name = '', summit = 0, snapped = false } = {}
     if (summit) ground = Math.max(ground, summit);
     state.obs = { lat, lon, ground, name };
     // 市街地では建物に視界をさえぎられるので、屋上の高さ(30m)から始める
-    const urbanStart = !summit && $('opt-buildings').checked && r.urban > 0.35;
+    const urbanStart = !summit && !deck && $('opt-buildings').checked && r.urban > 0.35;
     state.hIdx = urbanStart ? HEIGHTS.indexOf(30) : 0;
+    state.hOverride = deck || null;
     const h = await readHeading();
     state.heading = h ?? 0;
     state.pitch = 2;
@@ -856,6 +904,7 @@ async function startAt(lat, lon, { name = '', summit = 0, snapped = false } = {}
     nextQuest();
     const notes = [];
     if (snapped) notes.push(`${name} 山頂（標高${summit}m）から見ています`);
+    if (deck) notes.push(`${name}（地上${deck}m）から見ています`);
     if (urbanStart) notes.push('市街地のため、ビルの屋上（地上30m）から見ています。▼で地上に降りられます');
     if (h === null) notes.push('コンパスが使えないため北向きで表示しています');
     if (notes.length) toast(notes.join('\n'), '', 4500);
@@ -927,10 +976,11 @@ function openPicker() {
   }
   setTimeout(() => map.invalidateSize(), 50);
 }
-function pick(lat, lon, name, summit) {
-  picked = { lat, lon, name, summit };
+function pick(lat, lon, name, summit, deck = 0) {
+  picked = { lat, lon, name, summit, deck };
   marker.setLatLng([lat, lon]).addTo(map);
-  $('picker-info').textContent = `${name ? name + (summit ? ' 山頂' : '') + ' ' : ''}(${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+  if (!deck) $('deck-select').value = '';
+  $('picker-info').textContent = deck ? `${name}（地上${deck}m）` : `${name ? name + (summit ? ' 山頂' : '') + ' ' : ''}(${lat.toFixed(4)}, ${lon.toFixed(4)})`;
   $('btn-picker-ok').disabled = false;
 }
 $('btn-picker-ok').addEventListener('click', () => {
@@ -938,7 +988,7 @@ $('btn-picker-ok').addEventListener('click', () => {
   audio.unlock();
   sfx('start');
   enableCompass();
-  startAt(picked.lat, picked.lon, { name: picked.name || '選択地点', summit: picked.summit });
+  startAt(picked.lat, picked.lon, { name: picked.name || '選択地点', summit: picked.summit, deck: picked.deck });
 });
 $('btn-picker-cancel').addEventListener('click', () => {
   $('picker').classList.add('hidden');
@@ -959,6 +1009,23 @@ $('search').addEventListener('change', (e) => {
   map.setView([m.lat, m.lon], 12);
   pick(m.lat, m.lon, uniqueName(m), m.elev);
   e.target.blur();
+});
+
+// 展望台から見る
+{
+  const areas = [...new Set(OBSERVATORIES.map((o) => o.area))];
+  $('deck-select').innerHTML = '<option value="">展望台から見る…</option>' + areas.map((a) =>
+    `<optgroup label="${a}">${OBSERVATORIES.map((o, i) => (o.area === a ? `<option value="${i}">${o.name}（${o.deck}m）</option>` : '')).join('')}</optgroup>`).join('');
+}
+$('deck-select').addEventListener('change', (e) => {
+  if (e.target.value === '') return;
+  const o = OBSERVATORIES[+e.target.value];
+  map.setView([o.lat, o.lon], 14);
+  pick(o.lat, o.lon, o.name, 0, o.deck);
+});
+$('btn-start-deck').addEventListener('click', () => {
+  audio.unlock(); sfx('click'); initWorker(); enableCompass(); openPicker();
+  setTimeout(() => { $('deck-select').focus(); if ($('deck-select').showPicker) try { $('deck-select').showPicker(); } catch { /* 非対応 */ } }, 300);
 });
 
 // datalist

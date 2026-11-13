@@ -63,6 +63,12 @@
       <div id="result-detail"></div>
       <div id="result-time"></div>
       <ol id="result-list"></ol>
+      <div class="share-row">
+        <button id="btn-share" class="share-main">結果をシェア</button>
+        <button id="btn-share-x" class="share-sub" aria-label="Xでシェア">X</button>
+        <button id="btn-share-line" class="share-sub share-line" aria-label="LINEで送る">LINE</button>
+        <button id="btn-share-copy" class="share-sub" aria-label="結果をコピー">コピー</button>
+      </div>
       <div class="result-buttons">
         <button id="btn-again" class="primary">もう一度（同じ場所）</button>
         <button id="btn-result-place" class="secondary">場所を変える</button>
@@ -78,6 +84,7 @@
       <p class="lead">目の前に広がる景色から、お題の山を探してタップ！<br>日本百名山・二百名山・三百名山など <span id="peak-count"></span> 座の標高・地形データから、その場所から見える景色を再現します。</p>
       <button id="btn-start" class="primary">現在地でスタート</button>
       <button id="btn-start-place" class="secondary">地点を選んでスタート</button>
+      <button id="btn-start-deck" class="secondary">展望台から見る</button>
       <p class="note">スタートを押した時に端末が向いている方角から始まります。<br>2本指ドラッグで方角・角度、ピンチでズーム、▲▼で高さを変えられます。</p>
       <details class="settings">
         <summary>設定</summary>
@@ -107,6 +114,9 @@
 
   <!-- 地点選択 -->
   <div id="picker" class="panel hidden">
+    <div class="picker-head picker-deck">
+      <select id="deck-select" aria-label="展望台から見る"></select>
+    </div>
     <div class="picker-head">
       <input id="search" list="peak-list" placeholder="山の名前で山頂へ（例: 富士山）" />
       <datalist id="peak-list"></datalist>

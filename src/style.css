@@ -108,6 +108,8 @@ button.secondary { background: rgba(255,255,255,0.16); }
   display: flex; gap: 8px; padding: 10px; align-items: center; background: var(--bg);
 }
 .picker-head { padding-top: calc(10px + var(--safe-top)); }
+.picker-head + .picker-head { padding-top: 0; }
+#deck-select { flex: 1; font: inherit; padding: 10px 12px; border-radius: 10px; border: 0; min-width: 0; background: #ffd166; color: #1d2b3a; font-weight: 700; }
 .picker-foot { padding-bottom: calc(10px + var(--safe-bottom)); flex-wrap: wrap; }
 #search { flex: 1; font: inherit; padding: 10px 12px; border-radius: 10px; border: 0; min-width: 0; }
 #map { flex: 1; }
@@ -142,3 +144,10 @@ button.secondary { background: rgba(255,255,255,0.16); }
 #result-list .ng { color: #ff9b9b; white-space: nowrap; }
 .result-buttons { display: flex; flex-direction: column; gap: 8px; }
 .result-buttons button { padding: 12px; font-size: 16px; }
+
+/* シェア */
+.share-row { display: flex; gap: 6px; margin: 4px 0 10px; }
+.share-row button { padding: 10px 8px; font-size: 15px; font-weight: 700; }
+.share-main { flex: 1; background: var(--accent2); }
+.share-sub { min-width: 56px; background: rgba(255,255,255,0.16); }
+.share-line { background: #06c755; }

@@ -19,7 +19,9 @@ const LEVELS = [
 const PHOTO_LEVELS = [
   { z: 16, radius: 1200 },
   { z: 14, radius: 5000 },
+  { z: 12, radius: 20000 }, // 展望台・山頂から見下ろしたときの遠めの街や森
 ];
+const PHOTO_MAX = 20000;
 const BUILDING_MAX_DIST = 2500; // 建物を立てる最大距離 [m]
 
 let source = 'gsi';
@@ -322,7 +324,8 @@ function render({ heading, pitch, fov, width, height, h0, snowline }) {
       let li = pickLevel(d), lv = levels[li], h = sampleLevel(lv, mx, my);
       while (Number.isNaN(h) && li < levels.length - 1) { lv = levels[++li]; h = sampleLevel(lv, mx, my); }
       if (Number.isNaN(h)) h = 0;
-      const hb = h > 0.5 ? buildingAt(mx, my, d, h) : 0;
+      // 海抜ゼロメートル地帯でも建物を立てる（海・川は写真の色で除外される）
+      const hb = buildingAt(mx, my, d, h);
       const y = cy - f * ((h + hb - drop - h0) / d - tp);
       if (y < ymax) {
         let light = 1;
@@ -352,13 +355,14 @@ function render({ heading, pitch, fov, width, height, h0, snowline }) {
           }
           baseColor(h, snowline, col);
           // 近くは空中写真の色を使う（遠くへ行くほど通常の配色へ）
-          if (d < 5000 && h > 0.5 && photoAt(mx, my, d, pc)) {
-            const t = d < 3500 ? 1 : (5000 - d) / 1500;
+          const hasPhoto = d < PHOTO_MAX && photoAt(mx, my, d, pc);
+          if (hasPhoto) {
+            const t = d < PHOTO_MAX * 0.7 ? 1 : (PHOTO_MAX - d) / (PHOTO_MAX * 0.3);
             const sl = snowline && h > snowline ? 0.3 : 1;
             for (let k = 0; k < 3; k++) col[k] += (pc[k] * 0.95 - col[k]) * t * sl;
             light = 0.75 + 0.35 * (light - 0.45) / 0.75;
           }
-          if (h <= 0.5) light = 0.9;
+          if (h <= 0.5 && !hasPhoto) light = 0.9;
           col[0] *= light; col[1] *= light; col[2] *= light;
           haze(col, d);
         }
@@ -405,7 +409,7 @@ function maxTanAlong(az, dist, h0) {
     let h = NaN;
     for (let i = pickLevel(d); i < levels.length && Number.isNaN(h); i++) h = sampleLevel(levels[i], mx, my);
     if (Number.isNaN(h)) h = 0;
-    if (h > 0.5) h += buildingAt(mx, my, d, h);
+    h += buildingAt(mx, my, d, h);
     const t = (h - d * d / (2 * Reff) - h0) / d;
     if (t > maxT) maxT = t;
   }
