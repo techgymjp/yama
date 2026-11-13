@@ -71,7 +71,14 @@ button.secondary { background: rgba(255,255,255,0.16); }
 }
 #toolbar button { padding: 9px 13px; background: var(--glass); backdrop-filter: blur(6px); }
 #toolbar button.on { background: var(--accent2); }
-#score { background: var(--glass); padding: 9px 13px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 点数・問題数・タイム: お題パネルの右端（景色の上には別の枠を出さない） */
+#topbar { display: flex; align-items: center; gap: 12px; }
+.topbar-main { flex: 1; min-width: 0; }
+#score {
+  flex: 0 0 auto; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  color: #ffd166; padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.25); align-self: stretch;
+  display: flex; align-items: center;
+}
 
 #toast {
   white-space: pre-line;
@@ -254,9 +261,18 @@ button.secondary { background: rgba(255,255,255,0.16); }
 @media (orientation: landscape) and (max-height: 500px) {
   #toolbar { gap: 6px; }
   #toolbar button { padding: 8px 11px; font-size: 15px; }
-  #score { padding: 8px 11px; font-size: 15px; }
 }
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 700px) {
   #toolbar { gap: 4px; }
-  #toolbar button, #score { padding: 7px 8px; font-size: 14px; }
+  #toolbar button { padding: 7px 8px; font-size: 14px; }
+}
+
+/* 言語の切り替え（トップ画面の下） */
+.lang-btn { padding: 3px 12px; font-size: 12px; border: 1px solid rgba(255,255,255,0.5); background: transparent; border-radius: 999px; }
+
+/* 英語表示の調整 */
+html[lang="en"] .start-title h1 { letter-spacing: 0.02em; font-size: 50px; }
+html[lang="en"] #quest-name { margin-right: 0; }
+@media (orientation: landscape) and (max-height: 500px) {
+  html[lang="en"] .start-title h1 { font-size: 44px; }
 }

@@ -5,6 +5,9 @@ import STRUCTURES from './data/structures.json';
 import OBSERVATORIES from './data/observatories.json';
 import { createBgm } from './bgm.js';
 import { Ads } from './ads.js';
+import { t, isEn, setLang, applyI18n, mountainEn, prefEn, AREA_EN } from './i18n.js';
+
+applyI18n(); // 端末の言語（または保存した言語）で表示する
 
 // ---------------- サウンド（BGM・効果音） ----------------
 const audio = createBgm();
@@ -19,16 +22,21 @@ const sfx = (name) => { if (sfxOn) audio.sfx(name); };
 const DEG = Math.PI / 180;
 const $ = (id) => document.getElementById(id);
 const wrap180 = (a) => ((a % 360) + 540) % 360 - 180;
-const DIRS = ['北', '北北東', '北東', '東北東', '東', '東南東', '南東', '南南東', '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西'];
-const dirName = (az) => DIRS[Math.round(((az % 360) + 360) % 360 / 22.5) % 16];
+const dirName = (az) => t('dirs').split(',')[Math.round(((az % 360) + 360) % 360 / 22.5) % 16];
 const fmtDist = (m) => (m < 10000 ? (m / 1000).toFixed(1) : Math.round(m / 1000)) + 'km';
-const CLASS_LABEL = { 100: '日本百名山', 200: '日本二百名山', 300: '日本三百名山' };
+const classLabel = (cls) => (cls === 100 || cls === 200 || cls === 300 ? t(`class.${cls}`) : '');
 const RANK = { 100: 3, 200: 2, 300: 1, 0: 0 };
 const rank = (p) => RANK[p.cls] || 0;
 // 同名の山を区別するための表示名（例: 駒ヶ岳（北海道））
 const NAME_COUNT = {};
 for (const m of MOUNTAINS) NAME_COUNT[m.name] = (NAME_COUNT[m.name] || 0) + 1;
-const uniqueName = (m) => (NAME_COUNT[m.name] > 1 && m.pref ? `${m.name}（${m.pref}）` : m.name);
+// 表示名（英語では山はローマ字、構造物・展望台は英語名）
+const STRUCT_EN = Object.fromEntries(STRUCTURES.map((x) => [x.name, x.en]));
+for (const m of MOUNTAINS) m.nameEn = mountainEn(m.yomi, m.name);
+const dispName = (p) => (!isEn() ? p.name : (p.structure ? STRUCT_EN[p.name] || p.name : p.nameEn || mountainEn(p.yomi, p.name)));
+const deckName = (o) => (isEn() ? o.en : o.name);
+const prefName = (p) => (isEn() ? prefEn(p) : p);
+const uniqueName = (m) => (NAME_COUNT[m.name] > 1 && m.pref ? (isEn() ? `${dispName(m)} (${prefEn(m.pref)})` : `${m.name}（${m.pref}）`) : dispName(m));
 // 構造物ごとの展望台（同じ位置にある展望台）
 const STRUCT_DECKS = {};
 for (const st of STRUCTURES) {
@@ -42,26 +50,33 @@ const deckShort = (d, struct) => {
   // 「建物名 展望台名」の形なら展望台名だけ、それ以外（SHIBUYA SKY など）はそのまま
   return sp > 0 && struct.startsWith(n.slice(0, sp)) ? n.slice(sp + 1) : n;
 };
+function questSub(p) {
+  return diff().noYomi && !isEn() ? describe(p).replace(`${p.yomi}・`, '') : describe(p);
+}
 function describe(p) {
   if (p.structure) {
     const decks = STRUCT_DECKS[p.name];
     return decks
-      ? `${p.yomi}・高さ${p.height}m・展望台：${decks.map((d) => `${deckShort(d, p.name)} ${d.deck}m`).join('・')}`
-      : `${p.yomi}・高さ${p.height}m の構造物`;
+      ? t('desc.structureDeck', { yomi: p.yomi, h: p.height, decks: decks.map((d) => `${isEn() ? d.deckEn : deckShort(d, p.name)} ${d.deck}m`).join(isEn() ? ', ' : '・') })
+      : t('desc.structure', { yomi: p.yomi, h: p.height });
+  }
+  if (isEn()) {
+    // 英語: 都道府県・標高・区分（よみや漢字の別名は出さない）
+    return [prefEn(p.pref), t('desc.elev', { h: p.elev }), classLabel(p.cls)].filter(Boolean).join(' · ');
   }
   const parts = [p.yomi];
   if (p.alias || p.group) parts.push([p.alias, p.group].filter(Boolean).join('・'));
   if (p.pref) parts.push(p.pref);
-  parts.push(`標高${p.elev}m`);
-  if (CLASS_LABEL[p.cls]) parts.push(CLASS_LABEL[p.cls]);
+  parts.push(t('desc.elev', { h: p.elev }));
+  if (classLabel(p.cls)) parts.push(classLabel(p.cls));
   return parts.join('・');
 }
 const TOTAL_QUESTIONS = 10;
 // 難易度
 const DIFFICULTY = {
-  easy: { label: 'かんたん', maxDist: 150000, tol: 1.5, miss: 10, hint: 0, guide: true, famousOnly: true },
-  normal: { label: 'ふつう', maxDist: 260000, tol: 1.0, miss: 20, hint: 30, guide: false, famousOnly: false },
-  hard: { label: 'むずかしい', maxDist: 300000, tol: 0.7, miss: 25, hint: 50, guide: false, famousOnly: false, obscure: true, noYomi: true },
+  easy: { key: 'easy', maxDist: 150000, tol: 1.5, miss: 10, hint: 0, guide: true, famousOnly: true },
+  normal: { key: 'normal', maxDist: 260000, tol: 1.0, miss: 20, hint: 30, guide: false, famousOnly: false },
+  hard: { key: 'hard', maxDist: 300000, tol: 0.7, miss: 25, hint: 50, guide: false, famousOnly: false, obscure: true, noYomi: true },
 };
 const HEIGHTS = [1.6, 5, 10, 20, 30, 50, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000];
 
@@ -90,7 +105,7 @@ function snowline() {
 
 // ---------------- 画面上のエラー表示 ----------------
 function showError(msg) {
-  try { toast(`エラー: ${msg}`, 'bad', 6000); } catch { alert(`エラー: ${msg}`); }
+  try { toast(t('error', { msg }), 'bad', 6000); } catch { alert(t('error', { msg })); }
 }
 window.addEventListener('error', (e) => showError(e.message || String(e.error)));
 window.addEventListener('unhandledrejection', (e) => showError((e.reason && e.reason.message) || String(e.reason)));
@@ -406,7 +421,7 @@ function drawOverlay() {
 // 画面の左右端（コンパスと高さボタンの間）に、回る向きと角度を示すバッジ
 function drawHintBadge(diff) {
   const right = diff > 0;
-  const text = `${right ? '右' : '左'}へ ${Math.round(Math.abs(diff))}°`;
+  const text = t('badge', { side: t(right ? 'badge.right' : 'badge.left'), deg: Math.round(Math.abs(diff)) });
   octx.font = 'bold 17px system-ui, sans-serif';
   const tw = octx.measureText(text).width;
   const w = tw + 52, h = 44, r = h / 2;
@@ -451,7 +466,7 @@ function drawLabels(list, color, big = false) {
   octx.font = `${big ? 'bold 19px' : 'bold 15px'} system-ui, sans-serif`;
   octx.textAlign = 'center';
   for (const o of items) {
-    const label = big ? `${o.p.name}（${fmtDist(o.p.dist)}）` : o.p.name;
+    const label = big ? `${dispName(o.p)}${isEn() ? ` (${fmtDist(o.p.dist)})` : `（${fmtDist(o.p.dist)}）`}` : dispName(o.p);
     const w = octx.measureText(label).width + 10, hgt = big ? 25 : 20;
     let ly = null;
     for (let k = 0; k < 6; k++) {
@@ -479,7 +494,7 @@ function updateCompass() {
   const hd = ((Math.round(state.heading) % 360) + 360) % 360;
   $('compass-label').textContent = `${dirName(hd)} ${hd}°`;
   const total = state.obs ? Math.round(h0()) : 0;
-  $('height-label').innerHTML = `<span class="h-ground">地上${eyeHeight()}m</span><span class="h-total">標高${total}m</span>`;
+  $('height-label').innerHTML = `<span class="h-total">${t('height.total', { h: total })}</span>`;
 }
 
 // ---------------- 操作（タップ・ドラッグ・2本指） ----------------
@@ -526,7 +541,7 @@ view.addEventListener('pointermove', (e) => {
     if (gesture.axis === 'zoom') {
       state.fov = gesture.fov * gesture.dist / Math.max(dist, 1);
     } else if (gesture.axis === 'h') {
-      if (state.follow) setFollow(false, 'コンパス追従をオフにしました');
+      if (state.follow) setFollow(false, t('follow.off'));
       state.heading = gesture.heading - dx / f / DEG;
     } else if (gesture.axis === 'v') {
       state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + dy / f) / DEG;
@@ -536,7 +551,7 @@ view.addEventListener('pointermove', (e) => {
     // 1本指（マウス）ドラッグでも視点移動
     const dx = p.x - gesture.mx, dy = p.y - gesture.my;
     if (!gesture.axis && Math.hypot(p.x - p.x0, p.y - p.y0) > 8) gesture.axis = axisOf(dx, dy);
-    if (gesture.axis === 'h' && state.follow) setFollow(false, 'コンパス追従をオフにしました');
+    if (gesture.axis === 'h' && state.follow) setFollow(false, t('follow.off'));
     if (gesture.axis === 'h') state.heading = gesture.heading - dx / f / DEG;
     else if (gesture.axis === 'v') state.pitch = Math.atan(Math.tan(gesture.pitch * DEG) + dy / f) / DEG;
     if (gesture.axis) gesture.moved = true;
@@ -667,8 +682,8 @@ function resetGame() {
 }
 // ---- タイム（各問の出題から正解・パスまで） ----
 const fmtTime = (ms) => {
-  const t = ms / 1000;
-  return t < 60 ? `${t.toFixed(1)}秒` : `${Math.floor(t / 60)}分${(t % 60).toFixed(1).padStart(4, '0')}秒`;
+  const t_ = ms / 1000;
+  return t_ < 60 ? t('time.s', { s: t_.toFixed(1) }) : t('time.ms', { m: Math.floor(t_ / 60), s: (t_ % 60).toFixed(1).padStart(4, '0') });
 };
 const questionRunning = () => { const g = state.game; return g.target && !g.waiting && !g.finished && !g.revealed && g.qStart && !state.paused; };
 function elapsedMs() {
@@ -686,7 +701,7 @@ function stopQuestionTimer() {
 }
 function updateScore() {
   const g = state.game;
-  $('score').textContent = `${Math.max(1, g.round)}/${TOTAL_QUESTIONS}問・${g.points}点・⏱${Math.floor(elapsedMs() / 1000)}秒`;
+  $('score').textContent = t('score', { q: Math.max(1, g.round), total: TOTAL_QUESTIONS, pts: g.points, sec: Math.floor(elapsedMs() / 1000) });
 }
 setInterval(() => { if (state.obs && questionRunning()) updateScore(); }, 250);
 
@@ -706,9 +721,10 @@ function nextQuest() {
   const list = pool.length ? pool : cands;
   Object.assign(g, { misses: 0, hinted: false, revealed: false, target: null });
   if (!list.length) {
-    $('quest-name').textContent = '見える山がありません';
+    $('quest-prefix').textContent = '';
+    $('quest-name').textContent = t('quest.none');
     $('quest-suffix').textContent = '';
-    $('quest-sub').textContent = '▲で視点を高くするか、「地点」から場所を変えてみてください';
+    $('quest-sub').textContent = t('quest.noneSub');
     draw();
     return;
   }
@@ -725,10 +741,11 @@ function nextQuest() {
   g.qStart = performance.now();
   updateScore();
   g.recent = [pick.name, ...g.recent].slice(0, Math.min(8, Math.floor(cands.length / 2)));
-  $('quest-name').textContent = pick.name;
-  $('quest-suffix').textContent = `を探して！（第${g.round}問）`;
+  $('quest-prefix').textContent = t('quest.prefix');
+  $('quest-name').textContent = dispName(pick);
+  $('quest-suffix').textContent = t('quest.suffix', { n: g.round });
   sfx('quest');
-  $('quest-sub').textContent = D.noYomi ? describe(pick).replace(`${pick.yomi}・`, '') : describe(pick);
+  $('quest-sub').textContent = questSub(pick);
   draw();
 }
 
@@ -736,20 +753,20 @@ function onTap(x, y) {
   const g = state.game;
   if (!g.target || g.revealed) return;
   const { az, tanAlt } = unproject(x, y);
-  const t = project(g.target.az, g.target.tanAlt);
+  const tp = project(g.target.az, g.target.tanAlt);
   const D = diff();
   const tolX = Math.max(26 * D.tol, focal() * 1.0 * DEG * D.tol);
-  const hit = Math.abs(x - t.x) <= tolX && y >= t.y - 45 * D.tol && y <= t.y + Math.max(60, focal() * 2 * DEG) * D.tol;
+  const hit = Math.abs(x - tp.x) <= tolX && y >= tp.y - 45 * D.tol && y <= tp.y + Math.max(60, focal() * 2 * DEG) * D.tol;
   state.tapMark = { az, tanAlt, ok: hit, until: performance.now() + 1200 };
   if (hit) {
     const pts = Math.max(10, 100 - g.misses * D.miss - (g.hinted ? D.hint : 0));
     const ms = stopQuestionTimer();
     g.correct++;
     g.points += pts;
-    g.history.push({ name: g.target.name, ok: true, pts, ms });
+    g.history.push({ name: dispName(g.target), ok: true, pts, ms });
     updateScore();
     sfx('correct');
-    toast(`正解！ ${g.target.name}（${fmtDist(g.target.dist)}先）\n+${pts}点・${fmtTime(ms)}`, 'good', 2500);
+    toast(t('correct', { name: dispName(g.target), dist: fmtDist(g.target.dist), pts, time: fmtTime(ms) }), 'good', 2500);
     state.found = { peak: g.target, until: performance.now() + 3000 };
     g.target = null;
     g.waiting = true;
@@ -766,7 +783,7 @@ function onTap(x, y) {
       if (Math.abs(q.x - x) < bd && d < bd) { bd = d; best = p; }
     }
     sfx('wrong');
-    toast(best ? `そこは ${best.name}（${best.yomi}）です` : 'ちがいます…', 'bad');
+    toast(best ? t('wrongAt', { name: dispName(best), yomi: best.yomi }) : t('wrong'), 'bad');
     if (g.misses >= 3 && !g.hinted) showHint();
   }
   draw();
@@ -777,7 +794,7 @@ function showHint() {
   const g = state.game;
   if (!g.target) return;
   g.hinted = true;
-  $('quest-sub').textContent = `ヒント: ${dirName(g.target.az)}の方角（${Math.round(g.target.az)}°）・${fmtDist(g.target.dist)}先`;
+  $('quest-sub').textContent = t('hint', { dir: dirName(g.target.az), deg: Math.round(g.target.az), dist: fmtDist(g.target.dist) });
   draw();
 }
 // ---------------- 結果 ----------------
@@ -787,23 +804,42 @@ function showResult() {
   g.target = null;
   const max = TOTAL_QUESTIONS * 100;
   const rate = g.points / max;
-  const title = rate >= 0.9 ? '山の達人' : rate >= 0.7 ? '山の上級者' : rate >= 0.45 ? '山好き' : rate >= 0.2 ? 'ハイカー' : '山歩きビギナー';
+  const title = t(`title.${rate >= 0.9 ? 0 : rate >= 0.7 ? 1 : rate >= 0.45 ? 2 : rate >= 0.2 ? 3 : 4}`);
   $('result-title').textContent = title;
-  $('result-score').textContent = `${g.points}点`;
-  $('result-detail').textContent = `難易度「${diff().label}」・${TOTAL_QUESTIONS}問中 ${g.correct}問正解（${max}点満点）`;
-  $('result-time').textContent = `タイム ${fmtTime(g.totalMs)}${g.retries ? `・やり直し ${g.retries}回` : ''}`;
+  $('result-score').textContent = t('result.pts', { pts: g.points });
+  $('result-detail').textContent = t('result.detail', { level: t(`level.${difficulty}`), total: TOTAL_QUESTIONS, correct: g.correct, max });
+  $('result-time').textContent = t('result.time', { time: fmtTime(g.totalMs) }) + (g.retries ? t('result.retries', { n: g.retries }) : '');
   const isBest = saveBest(g.points, g.totalMs);
-  $('result-best').textContent = isBest ? `ベスト更新！（${diff().label}）` : bestText();
+  $('result-best').textContent = isBest ? t('result.newBest', { level: t(`level.${difficulty}`) }) : bestText();
   $('result-list').innerHTML = g.history.map((h, i) =>
-    `<li><span>第${i + 1}問 ${h.name}</span><span class="t">${fmtTime(h.ms)}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? `○ ${h.pts}点` : '× パス'}</span></li>`).join('');
+    `<li><span>${t('result.q', { n: i + 1, name: h.name })}</span><span class="t">${fmtTime(h.ms)}</span><span class="${h.ok ? 'ok' : 'ng'}">${h.ok ? t('result.ok', { pts: h.pts }) : t('result.pass')}</span></li>`).join('');
   updateScore();
   $('result').classList.remove('hidden');
   sfx(rate >= 0.45 ? 'result' : 'resultLow');
-  $('quest-name').textContent = '結果発表';
+  $('quest-prefix').textContent = '';
+  $('quest-name').textContent = t('quest.result');
   $('quest-suffix').textContent = '';
   $('quest-sub').textContent = '';
   draw();
 }
+// ---------------- 言語（日本語 / English） ----------------
+// プライバシーポリシーは言語に合わせたページへ
+function updatePrivacyLink() { $('privacy-link').href = isEn() ? 'https://techgym.jp/privacy-policy-en/' : 'https://techgym.jp/privacy-policy/'; }
+updatePrivacyLink();
+function refreshLanguage() {
+  applyI18n();
+  updatePrivacyLink();
+  showBest();
+  updateBgmButton();
+  buildDeckSelect();
+  buildPeakList();
+  if (legendEl) legendEl.innerHTML = t('map.legend');
+  if (!picked) $('picker-info').textContent = t('picker.info');
+  updateScore();
+  draw();
+}
+$('btn-lang').addEventListener('click', () => { setLang(isEn() ? 'ja' : 'en'); refreshLanguage(); });
+
 // ---------------- 難易度の選択（開始画面・結果画面） ----------------
 function updateDifficultyButtons() {
   document.querySelectorAll('.difficulty button').forEach((b) => b.classList.toggle('on', b.dataset.level === difficulty));
@@ -819,19 +855,19 @@ updateDifficultyButtons();
 const SHARE_URL = 'https://techgym.jp/column/claude-code-game-yama/';
 function shareText() {
   const g = state.game;
-  const place = state.obs && state.obs.name && !['現在地', '選択地点'].includes(state.obs.name) ? `${state.obs.name}から` : '';
-  return `山探し【${diff().label}】で${g.points}点（${$('result-title').textContent}）！${place}${TOTAL_QUESTIONS}問中${g.correct}問正解・タイム${fmtTime(g.totalMs)}${g.retries ? `・やり直し${g.retries}回` : ''} #山探し`;
+  const place = state.obs && state.obs.name && !state.obs.generic ? t('share.place', { name: state.obs.name }) : '';
+  return t('share.text', { level: t(`level.${difficulty}`), pts: g.points, title: $('result-title').textContent, place, total: TOTAL_QUESTIONS, correct: g.correct, time: fmtTime(g.totalMs), retries: g.retries ? t('share.retries', { n: g.retries }) : '' });
 }
 function openShare(url) { window.open(url, '_blank', 'noopener'); }
 $('btn-share').addEventListener('click', async () => {
   const text = shareText();
   const nativeShare = plugin('Share');
   if (nativeShare) {
-    try { await nativeShare.share({ title: '山探し', text, url: SHARE_URL, dialogTitle: '結果をシェア' }); } catch { /* キャンセル */ }
+    try { await nativeShare.share({ title: t('app.title'), text, url: SHARE_URL, dialogTitle: t('share.dialog') }); } catch { /* キャンセル */ }
     return;
   }
   if (navigator.share) {
-    try { await navigator.share({ title: '山探し', text, url: SHARE_URL }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.share({ title: t('app.title'), text, url: SHARE_URL }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   }
   openShare(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}`);
 });
@@ -849,7 +885,7 @@ $('btn-share-copy').addEventListener('click', async () => {
     try { document.execCommand('copy'); } catch { /* コピー不可 */ }
     ta.remove();
   }
-  toast('結果をコピーしました', 'good', 1800);
+  toast(t('share.copied'), 'good', 1800);
 });
 
 $('btn-again').addEventListener('click', async () => { sfx('start'); await interstitial(); resetGame(); nextQuest(); });
@@ -866,11 +902,11 @@ $('btn-skip').addEventListener('click', () => {
   g.revealed = true;
   g.waiting = true;
   g.preRevealView = { heading: state.heading, pitch: state.pitch };
-  g.history.push({ name: g.target.name, ok: false, pts: 0, ms: stopQuestionTimer() });
+  g.history.push({ name: dispName(g.target), ok: false, pts: 0, ms: stopQuestionTimer() });
   updateScore();
   sfx('reveal');
   // 答えは上部のお題の欄に出す（景色の山にメッセージが重ならないように）
-  $('quest-sub').textContent = `正解は ${g.target.name}（${dirName(g.target.az)}・${fmtDist(g.target.dist)}先）`;
+  $('quest-sub').textContent = t('answer', { name: dispName(g.target), dir: dirName(g.target.az), dist: fmtDist(g.target.dist) });
   // 山頂が画面の中央やや下（上から55%）に来るように向ける（ズームに関係なく収まる）
   animateTo(g.target.az, Math.atan(g.target.tanAlt + 0.05 * cssH / focal()) / DEG);
   // アプリでは、答えを見届けてから「広告を見てもう一度挑戦」を提案する（1 ゲーム 3 回まで）
@@ -896,9 +932,9 @@ $('btn-follow').addEventListener('click', async () => {
   enableCompass();
   // 向きの値が届くまで少し待つ（届かなければコンパスのない端末）
   for (let i = 0; i < 15 && deviceHeading === null; i++) await new Promise((r) => setTimeout(r, 100));
-  if (deviceHeading === null) { sfx('wrong'); toast('この端末ではコンパスが使えません', 'bad', 2500); return; }
+  if (deviceHeading === null) { sfx('wrong'); toast(t('follow.none'), 'bad', 2500); return; }
   sfx('toggleOn');
-  setFollow(true, 'コンパス追従オン：スマホを向けた方角の景色になります');
+  setFollow(true, t('follow.on'));
 });
 // 毎フレーム、端末の向きへ滑らかに近づける
 let followRaf = 0;
@@ -924,7 +960,7 @@ function followLoop() {
 // BGM のオン・オフ
 function updateBgmButton() {
   $('btn-bgm').classList.toggle('on', bgmOn);
-  $('btn-bgm').textContent = bgmOn ? '♪ BGM' : '♪ オフ';
+  $('btn-bgm').textContent = t(bgmOn ? 'tb.bgmOn' : 'tb.bgmOff');
 }
 $('btn-bgm').addEventListener('click', () => {
   bgmOn = !bgmOn;
@@ -1015,7 +1051,7 @@ function saveBest(points, ms) {
 }
 function bestText() {
   const b = loadBest();
-  return b ? `ベスト（${diff().label}）：${b.points}点・${fmtTime(b.ms)}` : '';
+  return b ? t('best', { level: t(`level.${difficulty}`), pts: b.points, time: fmtTime(b.ms) }) : '';
 }
 function showBest() { $('best').textContent = bestText(); }
 document.querySelectorAll('.difficulty button').forEach((b) => b.addEventListener('click', showBest));
@@ -1031,7 +1067,7 @@ let retryTimer = 0;
 function offerRetry() {
   const g = state.game;
   if (!g.revealed || g.finished) { nextQuest(); return; }
-  $('retry-left').textContent = `（このゲームであと ${MAX_RETRIES - g.retries} 回）`;
+  $('retry-left').textContent = t('retry.left', { n: MAX_RETRIES - g.retries });
   $('retry-offer').classList.remove('hidden');
   const bar = $('retry-bar');
   bar.style.transition = 'none'; bar.style.width = '100%';
@@ -1055,10 +1091,10 @@ function retryQuestion() {
   if (last) g.totalMs -= last.ms;
   Object.assign(g, { misses: 0, hinted: false, revealed: false, waiting: false, retries: g.retries + 1, qStart: performance.now() });
   if (g.preRevealView) animateTo(g.preRevealView.heading, g.preRevealView.pitch);
-  $('quest-sub').textContent = diff().noYomi ? describe(g.target).replace(`${g.target.yomi}・`, '') : describe(g.target);
+  $('quest-sub').textContent = questSub(g.target);
   updateScore();
   sfx('quest');
-  toast(`もう一度挑戦！（やり直し ${g.retries}回目）`, 'good', 2000);
+  toast(t('retry.toast', { n: g.retries }), 'good', 2000);
   draw();
 }
 
@@ -1157,17 +1193,17 @@ async function readHeading() {
 }
 
 // ---------------- 開始・地点の読み込み ----------------
-async function startAt(lat, lon, { name = '', summit = 0, snapped = false, deck = 0 } = {}) {  // deck: 展望台の高さ  // summit: 山頂の標高
+async function startAt(lat, lon, { name = '', summit = 0, snapped = false, deck = 0, generic = false } = {}) {  // deck: 展望台の高さ  // summit: 山頂の標高
   $('start').classList.add('hidden');
   $('picker').classList.add('hidden');
   $('loading').classList.remove('hidden');
   $('loading-bar').style.width = '0%';
-  $('loading-text').textContent = `${name ? name + ' の' : ''}地形データを読み込み中…`;
+  $('loading-text').textContent = name ? t('load.terrainAt', { name }) : t('load.terrain');
   try {
     const r = await call({ type: 'load', lat, lon });
     let ground = r.ground;
     if (summit) ground = Math.max(ground, summit);
-    state.obs = { lat, lon, ground, name };
+    state.obs = { lat, lon, ground, name, generic };
     // 市街地では建物に視界をさえぎられるので、屋上の高さ(30m)から始める
     const urbanStart = !summit && !deck && $('opt-buildings').checked && r.urban > 0.35;
     state.hIdx = urbanStart ? HEIGHTS.indexOf(30) : 0;
@@ -1177,7 +1213,7 @@ async function startAt(lat, lon, { name = '', summit = 0, snapped = false, deck 
     state.pitch = 2;
     state.fov = window.innerWidth < window.innerHeight ? 40 : 60;
     ['topbar', 'compass', 'height-ctrl', 'toolbar'].forEach((id) => $(id).classList.remove('hidden'));
-    $('loading-text').textContent = '見える山を計算中…';
+    $('loading-text').textContent = t('load.peaks');
     const pk = await call({ type: 'peaks', h0: h0() });
     state.peaks = pk.peaks;
     resetGame();
@@ -1189,21 +1225,21 @@ async function startAt(lat, lon, { name = '', summit = 0, snapped = false, deck 
     resize();
     nextQuest();
     const notes = [];
-    if (snapped) notes.push(`${name} 山頂（標高${summit}m）から見ています`);
-    if (deck) notes.push(`${name}（地上${deck}m）から見ています`);
-    if (urbanStart) notes.push('市街地のため、ビルの屋上（地上30m）から見ています。▼で地上に降りられます');
-    if (h === null) notes.push('コンパスが使えないため北向きで表示しています');
+    if (snapped) notes.push(t('note.summit', { name, h: summit }));
+    if (deck) notes.push(t('note.deck', { name, h: deck }));
+    if (urbanStart) notes.push(t('note.urban'));
+    if (h === null) notes.push(t('note.noCompass'));
     if (notes.length) toast(notes.join('\n'), '', 4500);
   } catch (err) {
     $('loading').classList.add('hidden');
-    toast(`読み込みに失敗しました: ${err.message}`, 'bad', 4000);
+    toast(t('load.failed', { msg: err.message }), 'bad', 4000);
     if (!state.obs) $('start').classList.remove('hidden');
   }
 }
 
 function getPosition() {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) { reject(new Error('位置情報が使えません')); return; }
+    if (!navigator.geolocation) { reject(new Error(t('geo.unavailable'))); return; }
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
       (e) => reject(e), { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
@@ -1233,19 +1269,19 @@ $('btn-start').addEventListener('click', async () => {
   await interstitial();
   try {
     const { lat, lon } = await getPosition();
-    if (!inJapan(lat, lon)) { toast('現在地が日本国外のため、地点を選んでください', 'bad', 3500); openPicker(); return; }
+    if (!inJapan(lat, lon)) { toast(t('geo.outside'), 'bad', 3500); openPicker(); return; }
     const sm = nearbySummit(lat, lon);
     if (sm) startAt(sm.lat, sm.lon, { name: uniqueName(sm), summit: sm.elev, snapped: true });
-    else startAt(lat, lon, { name: '現在地' });
+    else startAt(lat, lon, { name: t('place.current'), generic: true });
   } catch {
-    toast('現在地を取得できませんでした。地点を選んでください', 'bad', 3500);
+    toast(t('geo.failed'), 'bad', 3500);
     openPicker();
   }
 });
 $('btn-start-place').addEventListener('click', () => { audio.unlock(); initWorker(); enableCompass(); openPicker(); });
 
 // ---------------- 地点選択（地図） ----------------
-let map = null, marker = null, picked = null;
+let map = null, marker = null, picked = null, legendEl = null;
 function openPicker() {
   $('picker').classList.remove('hidden');
   if (!map) {
@@ -1257,7 +1293,7 @@ function openPicker() {
     marker = L.marker([0, 0], { icon });
     for (const m of MOUNTAINS) {
       L.circleMarker([m.lat, m.lon], { radius: 2 + rank(m) * 0.7, color: ['#6c757d', '#52796f', '#2a6f97', '#c1121f'][rank(m)], weight: 1, fillOpacity: 0.8 })
-        .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => { sfx('tap'); pick(m.lat, m.lon, uniqueName(m), m.elev); }).addTo(map);
+        .bindTooltip(() => `${dispName(m)} ${m.elev}m${classLabel(m.cls) ? (isEn() ? ` (${classLabel(m.cls)})` : `（${classLabel(m.cls)}）`) : ''}`).on('click', () => { sfx('tap'); pick(m.lat, m.lon, uniqueName(m), m.elev); }).addTo(map);
     }
     // 展望台（同じ建物の展望台は1つの印にまとめ、タップで選ぶ）
     const deckIcon = L.divIcon({
@@ -1273,8 +1309,8 @@ function openPicker() {
     });
     for (const idxs of groups.values()) {
       const o0 = OBSERVATORIES[idxs[0]];
-      const html = `<div class="deck-popup"><div class="deck-popup-title">展望台から見る</div>${idxs.map((i) =>
-        `<button data-deck="${i}">${OBSERVATORIES[i].name}<span>地上${OBSERVATORIES[i].deck}m</span></button>`).join('')}</div>`;
+      const html = () => `<div class="deck-popup"><div class="deck-popup-title">${t('map.deckTitle')}</div>${idxs.map((i) =>
+        `<button data-deck="${i}">${deckName(OBSERVATORIES[i])}<span>${t('map.deckHeight', { h: OBSERVATORIES[i].deck })}</span></button>`).join('')}</div>`;
       L.marker([o0.lat, o0.lon], { icon: deckIcon, zIndexOffset: 1000, title: idxs.map((i) => OBSERVATORIES[i].name).join(' / ') })
         .bindPopup(html, { closeButton: true, autoPanPadding: [20, 20] })
         .addTo(map);
@@ -1290,9 +1326,8 @@ function openPicker() {
     const legend = L.control({ position: 'bottomleft' });
     legend.onAdd = () => {
       const d = L.DomUtil.create('div', 'map-legend');
-      d.innerHTML = '<span><i style="background:#c1121f"></i>百名山</span><span><i style="background:#2a6f97"></i>二百名山</span>'
-        + '<span><i style="background:#52796f"></i>三百名山</span><span><i style="background:#6c757d"></i>その他</span>'
-        + '<span><i class="lg-deck"></i>展望台</span>';
+      d.innerHTML = t('map.legend');
+      legendEl = d;
       return d;
     };
     legend.addTo(map);
@@ -1305,7 +1340,7 @@ function pick(lat, lon, name, summit, deck = 0) {
   picked = { lat, lon, name, summit, deck };
   marker.setLatLng([lat, lon]).addTo(map);
   if (!deck) $('deck-select').value = '';
-  $('picker-info').textContent = deck ? `${name}（地上${deck}m）` : `${name ? name + (summit ? ' 山頂' : '') + ' ' : ''}(${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+  $('picker-info').textContent = deck ? t('picker.deckInfo', { name, h: deck }) : `${name ? `${name}${summit ? (isEn() ? ` ${t('place.summit')}` : ` ${t('place.summit')}`) : ''} ` : ''}(${lat.toFixed(4)}, ${lon.toFixed(4)})`;
   $('btn-picker-ok').disabled = false;
 }
 $('btn-picker-ok').addEventListener('click', () => {
@@ -1315,7 +1350,7 @@ $('btn-picker-ok').addEventListener('click', () => {
   sfx('start');
   enableCompass();
   const p = picked;
-  interstitial().then(() => startAt(p.lat, p.lon, { name: p.name || '選択地点', summit: p.summit, deck: p.deck }));
+  interstitial().then(() => startAt(p.lat, p.lon, { name: p.name || t('place.selected'), generic: !p.name, summit: p.summit, deck: p.deck }));
 });
 $('btn-picker-cancel').addEventListener('click', () => {
   $('picker').classList.add('hidden');
@@ -1325,13 +1360,14 @@ $('btn-here').addEventListener('click', async () => {
   try {
     const { lat, lon } = await getPosition();
     const sm = nearbySummit(lat, lon);
-    if (sm) { map.setView([sm.lat, sm.lon], 13); pick(sm.lat, sm.lon, uniqueName(sm), sm.elev); toast(`${uniqueName(sm)} 山頂の近くにいます`, '', 2500); }
-    else { map.setView([lat, lon], 12); pick(lat, lon, '現在地', false); }
-  } catch { toast('現在地を取得できませんでした', 'bad'); }
+    if (sm) { map.setView([sm.lat, sm.lon], 13); pick(sm.lat, sm.lon, uniqueName(sm), sm.elev); toast(t('geo.nearSummit', { name: uniqueName(sm) }), '', 2500); }
+    else { map.setView([lat, lon], 12); pick(lat, lon, t('place.current'), false); }
+  } catch { toast(t('geo.failedShort'), 'bad'); }
 });
 $('search').addEventListener('change', (e) => {
   const v = e.target.value.trim();
-  const m = MOUNTAINS.find((x) => uniqueName(x) === v) || MOUNTAINS.find((x) => x.name === v || x.yomi === v || x.alias === v);
+  const lv = v.toLowerCase();
+  const m = MOUNTAINS.find((x) => uniqueName(x) === v) || MOUNTAINS.find((x) => x.name === v || x.yomi === v || x.alias === v || (x.nameEn && x.nameEn.toLowerCase() === lv));
   if (!m) return;
   map.setView([m.lat, m.lon], 12);
   pick(m.lat, m.lon, uniqueName(m), m.elev);
@@ -1341,13 +1377,19 @@ $('search').addEventListener('change', (e) => {
 // 展望台から見る
 {
   const areas = [...new Set(OBSERVATORIES.map((o) => o.area))];
-  $('deck-select').innerHTML = '<option value="">展望台から見る…</option>' + areas.map((a) =>
-    `<optgroup label="${a}">${OBSERVATORIES.map((o, i) => (o.area === a ? `<option value="${i}">${o.name}（${o.deck}m）</option>` : '')).join('')}</optgroup>`).join('');
+  buildDeckSelect();
+}
+function buildDeckSelect() {
+  const areas = [...new Set(OBSERVATORIES.map((o) => o.area))];
+  const cur = $('deck-select').value;
+  $('deck-select').innerHTML = `<option value="">${t('picker.deckSelect')}</option>` + areas.map((a) =>
+    `<optgroup label="${isEn() ? AREA_EN[a] || a : a}">${OBSERVATORIES.map((o, i) => (o.area === a ? `<option value="${i}">${deckName(o)}${isEn() ? ` (${o.deck} m)` : `（${o.deck}m）`}</option>` : '')).join('')}</optgroup>`).join('');
+  $('deck-select').value = cur;
 }
 function selectDeck(i) {
   const o = OBSERVATORIES[i];
   map.setView([o.lat, o.lon], Math.max(map.getZoom(), 13));
-  pick(o.lat, o.lon, o.name, 0, o.deck);
+  pick(o.lat, o.lon, deckName(o), 0, o.deck);
   $('deck-select').value = String(i);
 }
 $('deck-select').addEventListener('change', (e) => {
@@ -1360,7 +1402,10 @@ $('btn-start-deck').addEventListener('click', () => {
 });
 
 // datalist
-$('peak-list').innerHTML = MOUNTAINS.map((m) => `<option value="${uniqueName(m)}">${m.yomi} ${m.elev}m</option>`).join('');
+function buildPeakList() {
+  $('peak-list').innerHTML = MOUNTAINS.map((m) => `<option value="${uniqueName(m)}">${isEn() ? '' : m.yomi + ' '}${m.elev}m</option>`).join('');
+}
+buildPeakList();
 $('opt-source').addEventListener('change', () => initWorker());
 $('opt-snow').addEventListener('change', () => invalidate());
 $('opt-buildings').addEventListener('change', () => {
