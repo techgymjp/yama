@@ -267,6 +267,25 @@ export function createBgm(opts = {}) {
       [['D4', 0, 0.35], ['B3', 0.3, 0.35], ['G3', 0.6, 0.5], ['D4', 1.1, 0.3], ['G4', 1.4, 0.9]].forEach(([n, dt, d]) => horn(N(n), t + dt, d, 0.2));
       cowbellSfx(t + 1.4);
     },
+    // ボタンのタップ: 短く柔らかい「ポッ」
+    tap(t) {
+      tone('sine', 1250, t, 0.07, 0.16, { to: 820, attack: 0.003 });
+      tone('triangle', 2500, t, 0.025, 0.05, { attack: 0.001 });
+    },
+    // 高さ ▲▼: 上がる・下がるブリップ
+    up(t) { tone('triangle', 660, t, 0.09, 0.18, { to: 990, attack: 0.004 }); },
+    down(t) { tone('triangle', 990, t, 0.09, 0.18, { to: 620, attack: 0.004 }); },
+    // オン・オフの切り替え
+    toggleOn(t) { tone('sine', mtof(N('E5')), t, 0.09, 0.16); tone('sine', mtof(N('B5')), t + 0.07, 0.14, 0.16); },
+    toggleOff(t) { tone('sine', mtof(N('B5')), t, 0.09, 0.14); tone('sine', mtof(N('E5')), t + 0.07, 0.14, 0.14); },
+    // 新しいお題: アルプス風の「ピンポン」＋カウベル
+    quest(t) {
+      tone('triangle', mtof(N('G5')), t, 0.4, 0.22);
+      tone('sine', mtof(N('G6')), t, 0.25, 0.06);
+      tone('triangle', mtof(N('D6')), t + 0.16, 0.55, 0.22);
+      tone('sine', mtof(N('D7')), t + 0.16, 0.3, 0.05);
+      cowbellSfx(t + 0.02);
+    },
     // ヒント・パスなどの軽い操作音
     click(t) { tone('sine', 880, t, 0.08, 0.15, { to: 660 }); },
     reveal(t) { ['G4', 'D4', 'B3'].forEach((n, i) => tone('triangle', mtof(N(n)), t + i * 0.12, 0.3, 0.2)); },

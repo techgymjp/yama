@@ -108,7 +108,6 @@ button.secondary { background: rgba(255,255,255,0.16); }
   display: flex; gap: 8px; padding: 10px; align-items: center; background: var(--bg);
 }
 .picker-head { padding-top: calc(10px + var(--safe-top)); }
-.picker-head + .picker-head { padding-top: 0; }
 #deck-select { flex: 1; font: inherit; padding: 10px 12px; border-radius: 10px; border: 0; min-width: 0; background: #ffd166; color: #1d2b3a; font-weight: 700; }
 .picker-foot { padding-bottom: calc(10px + var(--safe-bottom)); flex-wrap: wrap; }
 #search { flex: 1; font: inherit; padding: 10px 12px; border-radius: 10px; border: 0; min-width: 0; }
@@ -171,3 +170,20 @@ button.secondary { background: rgba(255,255,255,0.16); }
 .map-legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .map-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 .map-legend i.lg-deck { width: 12px; height: 12px; background: #ffd166; border: 2px solid #fff; box-shadow: 0 0 0 1px #999; }
+
+/* 地点選択: 上部は折り返して並べる（縦画面では展望台の欄を1行目に） */
+.picker-head { flex-wrap: wrap; }
+#deck-select { flex: 1 1 100%; }
+#search { flex: 1 1 160px; }
+/* 横長で低い画面: 展望台・検索・現在地を1行に、余白を詰めて地図を広く */
+@media (orientation: landscape) and (max-height: 500px) {
+  .picker-head, .picker-foot { padding: 6px 10px; gap: 6px; flex-wrap: nowrap; }
+  .picker-head { padding-top: calc(6px + var(--safe-top)); }
+  .picker-foot { padding-bottom: calc(6px + var(--safe-bottom)); }
+  #deck-select { flex: 1 1 0; }
+  #search { flex: 1 1 0; }
+  #deck-select, #search { padding: 7px 10px; font-size: 14px; }
+  #btn-here { padding: 7px 12px; font-size: 14px; }
+  #picker-info { flex: 1 1 auto; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picker-foot button { flex: 0 0 auto; padding: 8px 16px; font-size: 14px; }
+}

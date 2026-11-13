@@ -599,6 +599,7 @@ function changeHeight(dir) {
     if (n === state.hIdx) return;
   }
   state.hIdx = n;
+  sfx(dir > 0 ? 'up' : 'down');
   invalidate();
   clearTimeout(peaksTimer);
   peaksTimer = setTimeout(refreshPeaks, 250);
@@ -699,6 +700,7 @@ function nextQuest() {
   g.recent = [pick.name, ...g.recent].slice(0, Math.min(8, Math.floor(cands.length / 2)));
   $('quest-name').textContent = pick.name;
   $('quest-suffix').textContent = `を探して！（第${g.round}問）`;
+  sfx('quest');
   $('quest-sub').textContent = describe(pick);
   draw();
 }
@@ -781,7 +783,6 @@ function shareText() {
 }
 function openShare(url) { window.open(url, '_blank', 'noopener'); }
 $('btn-share').addEventListener('click', async () => {
-  sfx('click');
   const text = shareText();
   if (navigator.share) {
     try { await navigator.share({ title: '山探し', text, url: SHARE_URL }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -789,11 +790,9 @@ $('btn-share').addEventListener('click', async () => {
   openShare(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}`);
 });
 $('btn-share-x').addEventListener('click', () => {
-  sfx('click');
   openShare(`https://x.com/intent/post?text=${encodeURIComponent(shareText())}&url=${encodeURIComponent(SHARE_URL)}`);
 });
 $('btn-share-line').addEventListener('click', () => {
-  sfx('click');
   openShare(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(shareText())}`);
 });
 $('btn-share-copy').addEventListener('click', async () => {
@@ -804,18 +803,17 @@ $('btn-share-copy').addEventListener('click', async () => {
     try { document.execCommand('copy'); } catch { /* コピー不可 */ }
     ta.remove();
   }
-  sfx('click');
   toast('結果をコピーしました', 'good', 1800);
 });
 
 $('btn-again').addEventListener('click', () => { sfx('start'); resetGame(); nextQuest(); });
-$('btn-result-place').addEventListener('click', () => { sfx('click'); $('result').classList.add('hidden'); openPicker(); });
+$('btn-result-place').addEventListener('click', () => { $('result').classList.add('hidden'); openPicker(); });
 $('btn-result-view').addEventListener('click', () => { $('result').classList.add('hidden'); state.showLabels = true; $('btn-labels').classList.add('on'); draw(); });
 
-$('btn-hint').addEventListener('click', () => { sfx('click'); showHint(); });
+$('btn-hint').addEventListener('click', () => { showHint(); });
 $('btn-skip').addEventListener('click', () => {
   const g = state.game;
-  if (g.finished) { $('result').classList.remove('hidden'); return; }
+  if (g.finished) { sfx('tap'); $('result').classList.remove('hidden'); return; }
   if (g.waiting) return;
   if (!g.target) { nextQuest(); return; }
   g.revealed = true;
@@ -832,9 +830,10 @@ $('btn-skip').addEventListener('click', () => {
 $('btn-labels').addEventListener('click', () => {
   state.showLabels = !state.showLabels;
   $('btn-labels').classList.toggle('on', state.showLabels);
+  sfx(state.showLabels ? 'toggleOn' : 'toggleOff');
   draw();
 });
-$('btn-place').addEventListener('click', () => { sfx('click'); openPicker(); });
+$('btn-place').addEventListener('click', () => { openPicker(); });
 // BGM のオン・オフ
 function updateBgmButton() {
   $('btn-bgm').classList.toggle('on', bgmOn);
@@ -843,6 +842,7 @@ function updateBgmButton() {
 $('btn-bgm').addEventListener('click', () => {
   bgmOn = !bgmOn;
   savePref('yama.bgm', bgmOn);
+  sfx(bgmOn ? 'toggleOn' : 'toggleOff');
   audio.unlock();
   if (bgmOn) audio.start(); else audio.stop();
   updateBgmButton();
@@ -850,6 +850,16 @@ $('btn-bgm').addEventListener('click', () => {
 updateBgmButton();
 $('opt-sfx').checked = sfxOn;
 $('opt-sfx').addEventListener('change', () => { sfxOn = $('opt-sfx').checked; savePref('yama.sfx', sfxOn); });
+// すべてのボタン・地図のズーム・設定の開閉にタップ音
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button, .leaflet-control-zoom a, summary');
+  if (!b || b.disabled || b.dataset.sfx === 'none') return;
+  sfx('tap');
+}, true);
+// 選択欄・チェックボックス・検索欄の確定にもタップ音
+document.addEventListener('change', (e) => {
+  if (e.target.matches('select, input[type="checkbox"], #search')) sfx('tap');
+}, true);
 // 画面が隠れたら音を止める
 document.addEventListener('visibilitychange', () => { if (document.hidden) audio.suspend(); else audio.resume(); });
 
@@ -866,28 +876,63 @@ function animateTo(az, pitch) {
 }
 
 // ---------------- コンパス（端末の向き） ----------------
-let deviceHeading = null;
+let deviceHeading = null;   // 最新の向き（度、北=0・時計回り）
+let pressHeading = null;    // スタートを押した直後の向き
+let capturePending = false;
+let iosOffset = null;       // iOS: 相対 alpha から真北への補正
+const screenAngle = () => (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+
+// alpha/beta/gamma から「画面の裏側（背面カメラ）が向いている方角」を求める。
+// 端末をほぼ水平に寝かせているときは、画面の上端が向いている方角を使う。
+function headingFromAngles(alpha, beta, gamma) {
+  const a = alpha * DEG, b = beta * DEG, g = gamma * DEG;
+  const cA = Math.cos(a), sA = Math.sin(a), cB = Math.cos(b), sB = Math.sin(b), cG = Math.cos(g), sG = Math.sin(g);
+  // 端末の z 軸（画面から手前へ）を地球座標（x=東, y=北, z=上）で表したもの。背面カメラはその逆向き
+  const vx = -(cA * sG + sA * sB * cG), vy = -(sA * sG - cA * sB * cG), vz = -(cB * cG);
+  if (Math.abs(vz) < 0.8) return (Math.atan2(vx, vy) / DEG + 360) % 360;
+  // 寝かせている: 画面上端の方角（画面の回転も考慮）
+  return (360 - alpha + screenAngle() + 360) % 360;
+}
+
 function onOrientation(e) {
-  let h = null;
-  if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;
-  else if (e.absolute && typeof e.alpha === 'number') h = 360 - e.alpha;
-  if (h === null) return;
-  const so = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
-  deviceHeading = (h + so + 360) % 360;
+  if (typeof e.alpha !== 'number' || typeof e.beta !== 'number' || typeof e.gamma !== 'number') return;
+  let h;
+  if (typeof e.webkitCompassHeading === 'number') {
+    // iOS: alpha は相対値なので、webkitCompassHeading（上端の真の方角）との差で補正する
+    const topRel = (360 - e.alpha + 360) % 360;
+    iosOffset = (e.webkitCompassHeading - topRel + 360) % 360;
+    h = (headingFromAngles(e.alpha, e.beta, e.gamma) + iosOffset) % 360;
+  } else if (e.absolute || e.type === 'deviceorientationabsolute') {
+    h = headingFromAngles(e.alpha, e.beta, e.gamma);
+  } else return;
+  deviceHeading = h;
+  if (capturePending) { pressHeading = h; capturePending = false; }
+}
+// スタートを押した瞬間の向きを記録する（押した直後に届いた最初の値）
+window.__compass = () => ({ deviceHeading, pressHeading, capturePending, listening: !!enableCompass.listening }); // デバッグ用
+function markStartHeading() {
+  pressHeading = null;
+  capturePending = true;
 }
 async function enableCompass() {
+  // 先に受け取りを始める（許可がなければイベントが来ないだけなので害はない）。
+  // requestPermission は iOS のほか新しい Chrome にもあり、"granted" 以外（"prompt" など）を返すことがあるため、
+  // その結果で受け取りをやめてはいけない。
+  if (!enableCompass.listening) {
+    enableCompass.listening = true;
+    window.addEventListener('deviceorientationabsolute', onOrientation);
+    window.addEventListener('deviceorientation', onOrientation);
+  }
   try {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      const r = await DeviceOrientationEvent.requestPermission();
-      if (r !== 'granted') return;
+      await DeviceOrientationEvent.requestPermission();
     }
-  } catch { return; }
-  window.addEventListener('deviceorientationabsolute', onOrientation);
-  window.addEventListener('deviceorientation', onOrientation);
+  } catch { /* 許可の確認ができない環境 */ }
 }
 async function readHeading() {
-  for (let i = 0; i < 10 && deviceHeading === null; i++) await new Promise((r) => setTimeout(r, 100));
-  return deviceHeading;
+  // 押した瞬間の向きがあればそれを使う（読み込み中に端末を動かしても、押した時の方角で始まる）
+  for (let i = 0; i < 15 && pressHeading === null && deviceHeading === null; i++) await new Promise((r) => setTimeout(r, 100));
+  return pressHeading ?? deviceHeading;
 }
 
 // ---------------- 開始・地点の読み込み ----------------
@@ -960,6 +1005,7 @@ const inJapan = (lat, lon) => lat > 20 && lat < 46.5 && lon > 122 && lon < 154.5
 
 $('btn-start').addEventListener('click', async () => {
   audio.unlock();
+  markStartHeading();
   sfx('start');
   initWorker();
   enableCompass();
@@ -974,7 +1020,7 @@ $('btn-start').addEventListener('click', async () => {
     openPicker();
   }
 });
-$('btn-start-place').addEventListener('click', () => { audio.unlock(); sfx('click'); initWorker(); enableCompass(); openPicker(); });
+$('btn-start-place').addEventListener('click', () => { audio.unlock(); initWorker(); enableCompass(); openPicker(); });
 
 // ---------------- 地点選択（地図） ----------------
 let map = null, marker = null, picked = null;
@@ -989,7 +1035,7 @@ function openPicker() {
     marker = L.marker([0, 0], { icon });
     for (const m of MOUNTAINS) {
       L.circleMarker([m.lat, m.lon], { radius: 2 + rank(m) * 0.7, color: ['#6c757d', '#52796f', '#2a6f97', '#c1121f'][rank(m)], weight: 1, fillOpacity: 0.8 })
-        .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => pick(m.lat, m.lon, uniqueName(m), m.elev)).addTo(map);
+        .bindTooltip(`${m.name} ${m.elev}m${CLASS_LABEL[m.cls] ? '（' + CLASS_LABEL[m.cls] + '）' : ''}`).on('click', () => { sfx('tap'); pick(m.lat, m.lon, uniqueName(m), m.elev); }).addTo(map);
     }
     // 展望台（同じ建物の展望台は1つの印にまとめ、タップで選ぶ）
     const deckIcon = L.divIcon({
@@ -1012,6 +1058,7 @@ function openPicker() {
         .addTo(map);
     }
     map.on('popupopen', (e) => {
+      if (e.popup.getElement().querySelector('.deck-popup')) sfx('tap');
       e.popup.getElement().querySelectorAll('button[data-deck]').forEach((b) => b.addEventListener('click', () => {
         selectDeck(+b.dataset.deck);
         map.closePopup();
@@ -1027,7 +1074,7 @@ function openPicker() {
       return d;
     };
     legend.addTo(map);
-    map.on('click', (e) => pick(e.latlng.lat, e.latlng.lng, '', false));
+    map.on('click', (e) => { sfx('tap'); pick(e.latlng.lat, e.latlng.lng, '', false); });
     if (state.obs) pick(state.obs.lat, state.obs.lon, state.obs.name, false);
   }
   setTimeout(() => map.invalidateSize(), 50);
@@ -1042,6 +1089,7 @@ function pick(lat, lon, name, summit, deck = 0) {
 $('btn-picker-ok').addEventListener('click', () => {
   if (!picked) return;
   audio.unlock();
+  markStartHeading();
   sfx('start');
   enableCompass();
   startAt(picked.lat, picked.lon, { name: picked.name || '選択地点', summit: picked.summit, deck: picked.deck });
@@ -1084,7 +1132,7 @@ $('deck-select').addEventListener('change', (e) => {
   selectDeck(+e.target.value);
 });
 $('btn-start-deck').addEventListener('click', () => {
-  audio.unlock(); sfx('click'); initWorker(); enableCompass(); openPicker();
+  audio.unlock(); initWorker(); enableCompass(); openPicker();
   setTimeout(() => { $('deck-select').focus(); if ($('deck-select').showPicker) try { $('deck-select').showPicker(); } catch { /* 非対応 */ } }, 300);
 });
 

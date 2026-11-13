@@ -37,18 +37,18 @@
 
   <!-- 右側: 高さ調整 -->
   <div id="height-ctrl" class="hidden">
-    <button id="btn-up" aria-label="上へ">▲</button>
+    <button id="btn-up" data-sfx="none" aria-label="上へ">▲</button>
     <div id="height-label">+0m</div>
-    <button id="btn-down" aria-label="下へ">▼</button>
+    <button id="btn-down" data-sfx="none" aria-label="下へ">▼</button>
   </div>
 
   <!-- 下部ツールバー -->
   <div id="toolbar" class="hidden">
     <button id="btn-hint">ヒント</button>
-    <button id="btn-skip">パス</button>
-    <button id="btn-labels">山名</button>
+    <button id="btn-skip" data-sfx="none">パス</button>
+    <button id="btn-labels" data-sfx="none">山名</button>
     <button id="btn-place">地点</button>
-    <button id="btn-bgm">♪ BGM</button>
+    <button id="btn-bgm" data-sfx="none">♪ BGM</button>
     <div id="score">1/10問・0点・⏱0秒</div>
   </div>
 
@@ -70,7 +70,7 @@
         <button id="btn-share-copy" class="share-sub" aria-label="結果をコピー">コピー</button>
       </div>
       <div class="result-buttons">
-        <button id="btn-again" class="primary">もう一度（同じ場所）</button>
+        <button id="btn-again" data-sfx="none" class="primary">もう一度（同じ場所）</button>
         <button id="btn-result-place" class="secondary">場所を変える</button>
         <button id="btn-result-view" class="secondary">景色を見る</button>
       </div>
@@ -82,7 +82,7 @@
     <div class="start-inner">
       <h1>山探し</h1>
       <p class="lead">目の前に広がる景色から、お題の山を探してタップ！<br>日本百名山・二百名山・三百名山など <span id="peak-count"></span> 座の標高・地形データから、その場所から見える景色を再現します。</p>
-      <button id="btn-start" class="primary">現在地でスタート</button>
+      <button id="btn-start" data-sfx="none" class="primary">現在地でスタート</button>
       <button id="btn-start-place" class="secondary">地点を選んでスタート</button>
       <button id="btn-start-deck" class="secondary">展望台から見る</button>
       <p class="note">スタートを押した時に端末が向いている方角から始まります。<br>2本指ドラッグで方角・角度、ピンチでズーム、▲▼で高さを変えられます。</p>
@@ -114,10 +114,8 @@
 
   <!-- 地点選択 -->
   <div id="picker" class="panel hidden">
-    <div class="picker-head picker-deck">
-      <select id="deck-select" aria-label="展望台から見る"></select>
-    </div>
     <div class="picker-head">
+      <select id="deck-select" aria-label="展望台から見る"></select>
       <input id="search" list="peak-list" placeholder="山の名前で山頂へ（例: 富士山）" />
       <datalist id="peak-list"></datalist>
       <button id="btn-here" title="現在地">現在地</button>
@@ -126,7 +124,7 @@
     <div class="picker-foot">
       <span id="picker-info">地図をタップして地点を選択</span>
       <button id="btn-picker-cancel" class="secondary">戻る</button>
-      <button id="btn-picker-ok" class="primary" disabled>この地点で見る</button>
+      <button id="btn-picker-ok" data-sfx="none" class="primary" disabled>この地点で見る</button>
     </div>
   </div>
 
