@@ -249,3 +249,14 @@ button.secondary { background: rgba(255,255,255,0.16); }
 .difficulty button.on { background: #ffd166; color: #1d2b3a; font-weight: 800; }
 .difficulty-result { margin-bottom: 8px; }
 .difficulty-result button { padding: 8px 6px; font-size: 14px; }
+
+/* 横長で低い画面（スマホの横向き）: ツールバーを1行に収める */
+@media (orientation: landscape) and (max-height: 500px) {
+  #toolbar { gap: 6px; }
+  #toolbar button { padding: 8px 11px; font-size: 15px; }
+  #score { padding: 8px 11px; font-size: 15px; }
+}
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 700px) {
+  #toolbar { gap: 4px; }
+  #toolbar button, #score { padding: 7px 8px; font-size: 14px; }
+}
