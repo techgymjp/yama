@@ -15,7 +15,7 @@ const UNITS = {
     // 空の種類は本番ビルド（Google Play 用）では出さない
     production: {
       interstitial: 'ca-app-pub-6411535997477460/2736011294',
-      rewarded: 'ca-app-pub-6411535997477460/9976761975',
+      rewarded: 'ca-app-pub-6411535997477460/6736187244',
       banner: 'ca-app-pub-6411535997477460/8096149184',
     },
   },
