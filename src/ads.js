@@ -14,7 +14,7 @@ const UNITS = {
     // 本番の広告ユニット（AdMob の Android アプリ「山探し」）。
     // 空の種類は本番ビルド（Google Play 用）では出さない
     production: {
-      interstitial: 'ca-app-pub-6411535997477460/5267360775',
+      interstitial: 'ca-app-pub-6411535997477460/2736011294',
       rewarded: 'ca-app-pub-6411535997477460/9976761975',
       banner: 'ca-app-pub-6411535997477460/8096149184',
     },
