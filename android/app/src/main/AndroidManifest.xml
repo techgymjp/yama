@@ -42,4 +42,7 @@
     <!-- 方角はコンパス（向きセンサー）を使う。センサーのない端末でも入れられるようにする -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
+    <!-- 画面は横向きに固定しているが、縦・横どちらの画面も必須ではない（Google Play で対応端末を絞り込まないため） -->
+    <uses-feature android:name="android.hardware.screen.landscape" android:required="false" />
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 </manifest>
