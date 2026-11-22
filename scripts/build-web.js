@@ -24,7 +24,7 @@ fs.writeFileSync(path.join(out, 'build-info.js'), `// ビルド時に生成\nwin
 
 // アプリ用に取り除き忘れがあればビルドを止める
 if (app) {
-  const banned = [/web-only/, /__yama/, /__compass/, /__lastRenderMs/, /__renderCount/];
+  const banned = [/web-only/, /__yama/, /__compass/, /__lastRenderMs/, /__renderCount/, /play\.google\.com/i, /Google Play/, /store-link/];
   const problems = [];
   const walk = (dir) => {
     for (const name of fs.readdirSync(dir)) {

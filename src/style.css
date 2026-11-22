@@ -276,3 +276,15 @@ html[lang="en"] #quest-name { margin-right: 0; }
 @media (orientation: landscape) and (max-height: 500px) {
   html[lang="en"] .start-title h1 { font-size: 44px; }
 }
+
+/* web-only:start */
+/* Web 版だけ: Google Play のアプリ版へのリンク */
+.store-link {
+  display: block; text-align: center; padding: 9px 12px; border-radius: 999px; font-size: 15px; font-weight: 700;
+  color: #ffd166; border: 1px solid rgba(255, 209, 102, 0.6); text-decoration: none;
+}
+.store-link:active { transform: scale(0.97); }
+@media (orientation: landscape) and (max-height: 500px) {
+  .store-link { padding: 6px 10px; font-size: 14px; }
+}
+/* web-only:end */

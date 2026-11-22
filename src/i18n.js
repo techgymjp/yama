@@ -15,6 +15,9 @@ const DICT = {
     'start.adPrivacy': '広告の設定',
     'start.data': '地図・標高データ：国土地理院',
     'start.lang': 'English',
+    // web-only:start
+    'start.getAndroid': 'Android アプリ版（Google Play）',
+    // web-only:end
     'level.easy': 'かんたん', 'level.normal': 'ふつう', 'level.hard': 'むずかしい',
     'level.aria': '難易度',
     'howto.title': 'あそびかた',
@@ -98,6 +101,9 @@ const DICT = {
     'start.adPrivacy': 'Ad settings',
     'start.data': 'Map & elevation data: GSI Japan',
     'start.lang': '日本語',
+    // web-only:start
+    'start.getAndroid': 'Get the Android app (Google Play)',
+    // web-only:end
     'level.easy': 'Easy', 'level.normal': 'Normal', 'level.hard': 'Hard',
     'level.aria': 'Difficulty',
     'howto.title': 'How to play',
