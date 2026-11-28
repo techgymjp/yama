@@ -103,8 +103,7 @@ Capacitor 8 で Android アプリにしています（パッケージ名 `jp.tec
 - ビルドは GitHub Actions（`.github/workflows/android.yml`）で行います。既定ブランチのビルドは Release `android-latest` の APK を差し替えます。
   GitHub Secrets（`ANDROID_KEYSTORE_BASE64` など 4 つ）を登録すると、Google Play 用の署名付き AAB（本番広告）も作ります。
 - 手元で Android Studio を使う場合: `npm run android:sync` → `npm run android:open`
-- 広告（`src/ads.js`）: バナーはトップ・あそびかた・一時停止・結果画面だけ。全画面広告はプレイ開始・トップに戻る・再開・もう一度のたび。
-  リワード広告はパスした問題にもう一度挑戦するとき（1 ゲーム 3 回まで、結果とシェア文に「やり直し N 回」）。
+- 広告（`src/ads.js`）: バナーはあそびかた・結果画面だけ（トップ・一時停止・プレイ中は出さない）。全画面広告は結果画面から「もう一度」で次のゲームを始めるときだけ（毎回。AdMob の「コンテンツより広告が多い」ポリシー対策のため、ガイドの広告ルールより控えめにしている）。リワード広告はパスした問題へのもう一度挑戦（1 ゲーム 3 回まで、結果とシェア文に「やり直し N 回」）。
   AdMob のアプリ ID は `android/app/src/main/res/values/strings.xml`、本番の広告ユニット ID は `src/ads.js` にあります。
 - アプリでは、Android の戻るボタン（プレイ中は一時停止、トップ・結果画面では終了）、Android の共有メニュー、別アプリに切り替えたときの自動一時停止に対応しています。
 - Google Play: https://play.google.com/store/apps/details?id=jp.techgym.yama 。Web 版のトップ画面にアプリ版へのリンクがあります（`<!-- web-only -->` で囲み、アプリ用のビルドでは取り除く）。

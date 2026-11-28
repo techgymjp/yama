@@ -990,7 +990,8 @@ const plugin = (name) => (NATIVE && window.Capacitor.Plugins ? window.Capacitor.
 const MAX_RETRIES = 3;
 Ads.hooks.pause = () => audio.suspend();
 Ads.hooks.resume = () => { if (!document.hidden) audio.resume(); };
-// 全画面広告（プレイ開始・トップに戻る・再開・もう一度 のたび）。読み込めていなければ最大 1.5 秒だけ待つ
+// 全画面広告は「1 ゲーム終わって、結果画面から『もう一度』で次のゲームを始めるとき」だけ毎回出す（AdMob の「コンテンツより広告が多い」対策）。
+// プレイ開始・トップに戻る・ポーズからの再開では出さない。読み込めていなければ最大 1.5 秒だけ待つ
 const interstitial = () => Ads.showInterstitial(1500);
 if (NATIVE) document.documentElement.classList.add('native');
 // バナーを出す画面では、下のボタンが隠れないよう余白をとる
@@ -1001,14 +1002,13 @@ const playing = () => !!state.obs && !['start', 'howto', 'picker', 'result', 'lo
 
 // バナーはトップ・あそびかた・ポーズ・結果画面だけ（プレイ中は操作ボタンと重なるので出さない）
 function updateBanner() {
-  Ads.setBanner(['start', 'howto', 'pause', 'result'].some(isShown) && !isShown('picker') && !isShown('loading'));
+  Ads.setBanner(['howto', 'result'].some(isShown) && !isShown('picker') && !isShown('loading'));
 }
 new MutationObserver(updateBanner).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
 updateBanner();
 
 // トップ画面へ（あそびかた・ポーズ・結果画面から）
 async function goTop() {
-  await interstitial();
   ['howto', 'pause', 'result', 'picker', 'retry-offer'].forEach((id) => $(id).classList.add('hidden'));
   state.paused = false;
   showBest();
@@ -1024,7 +1024,6 @@ function pauseGame() {
 }
 async function resumeGame() {
   if (!state.paused) return;
-  await interstitial();
   const g = state.game;
   if (g.qStart) g.qStart += performance.now() - state.pausedAt; // 止めていた時間はタイムに入れない
   state.paused = false;
@@ -1266,7 +1265,6 @@ $('btn-start').addEventListener('click', async () => {
   sfx('start');
   initWorker();
   enableCompass();
-  await interstitial();
   try {
     const { lat, lon } = await getPosition();
     if (!inJapan(lat, lon)) { toast(t('geo.outside'), 'bad', 3500); openPicker(); return; }
@@ -1350,7 +1348,7 @@ $('btn-picker-ok').addEventListener('click', () => {
   sfx('start');
   enableCompass();
   const p = picked;
-  interstitial().then(() => startAt(p.lat, p.lon, { name: p.name || t('place.selected'), generic: !p.name, summit: p.summit, deck: p.deck }));
+  startAt(p.lat, p.lon, { name: p.name || t('place.selected'), generic: !p.name, summit: p.summit, deck: p.deck });
 });
 $('btn-picker-cancel').addEventListener('click', () => {
   $('picker').classList.add('hidden');
